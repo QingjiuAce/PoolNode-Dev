@@ -1,0 +1,57 @@
+# =====================================================================
+# Pool PoC V0.1 资产白名单示例
+# ---------------------------------------------------------------------
+# 授权规则（缺一不可，无默认批准）：
+#   * permission_status: pending | approved | denied
+#   * 只有 approved 且 permission_evidence 非空才允许 sync；
+#   * expected_sha256 为官方登记值（站长从 GitHub 仓库文件核对后填写）；
+#     为 null 时仅做本地哈希记录，不视为完成官方一致性验证。
+#   * relative_path 即图片在 lmy414/ai-girl-stickers 仓库中的相对路径，
+#     同时也是 Pool 对外 URL（https://<POOL_DOMAIN>/<relative_path>）。
+# =====================================================================
+
+assets:
+
+  # ---------------------------------------------------------------
+  # 【测试用】本地回环测试资产：仅用于开发与服务器本机端到端验证。
+  # 文件由 Python 标准库生成（tests/helpers.py 的 make_png），无版权问题。
+  # 使用时需 config 中开启 allow_loopback_http: true 并把 127.0.0.1 加入
+  # upstream.allowed_hosts。生产部署时本条可保留（无公网暴露面）或删除。
+  # ---------------------------------------------------------------
+  - asset_id: test-poc-001
+    source_url: http://127.0.0.1:8000/pool-tests/test-poc-001.png
+    relative_path: pool-tests/test-poc-001.png
+    permission_status: approved
+    permission_evidence: "测试资产：本项目自生成图片（无第三方著作权），站长批准用于 PoC 验证"
+    attribution: "Pool PoC 测试素材"
+    license: "测试用途，随 Pool 代码以 MIT 提供"
+    expected_sha256: null     # 测试资产无官方哈希，按本地校验记录
+    revision: 1
+
+  # ---------------------------------------------------------------
+  # 【示例：待授权的真实作品】保持 pending —— sync 会被拒绝。
+  # 待站长明确批准后：把 status 改为 approved、补 permission_evidence、
+  # 填 expected_sha256（从 GitHub 仓库文件核对）。
+  # ---------------------------------------------------------------
+  - asset_id: example-real-pending
+    source_url: https://raw.githubusercontent.com/lmy414/ai-girl-stickers/main/owner-picks/blue-maid.png
+    relative_path: owner-picks/blue-maid.png
+    permission_status: pending
+    permission_evidence: ""
+    attribution: "蓝色大肥鱼 站长自用板块"
+    license: "图片权利归原作者；仓库 MIT 许可仅覆盖文字材料，不含图片"
+    expected_sha256: null
+    revision: 1
+
+  # ---------------------------------------------------------------
+  # 【示例：明确拒绝】denied 资产永远无法 sync。
+  # ---------------------------------------------------------------
+  - asset_id: example-denied
+    source_url: https://raw.githubusercontent.com/lmy414/ai-girl-stickers/main/blue-fish-originals/026e44f4-845f-4e51-bcec-812497aadcff.png
+    relative_path: blue-fish-originals/026e44f4-845f-4e51-bcec-812497aadcff.png
+    permission_status: denied
+    permission_evidence: "示例条目：演示 denied 行为"
+    attribution: "-"
+    license: "-"
+    expected_sha256: null
+    revision: 1
