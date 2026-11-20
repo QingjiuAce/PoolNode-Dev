@@ -78,9 +78,11 @@ docs/      ARCHITECTURE / DEPLOYMENT / SECURITY / CHINA-TEST / TEST_REPORT
 
 ## 状态
 
-- [x] Phase 0 环境审查（docs/ARCHITECTURE.md §2）
-- [x] Phase 1 核心实现 + 自动化测试（本地 76 通过 / 服务器 77 通过）
-- [x] Phase 2 服务器部署 + Nginx 回环验证（冒烟 23/23）
-- [x] Phase 3 端到端 PoC（测试图片三方 SHA256 闭环；真实原图**等待授权**）
-- [x] Phase 4 验收报告（docs/TEST_REPORT.md）
-- [ ] HTTPS 正式域名（**等待用户提供域名与 DNS**，在此之前不提供公网下载 URL）
+- [x] V0.1 内部 PoC：核心实现 + 78 项测试 + 回环静态服务（docs/TEST_REPORT.md）
+- [x] V0.2 公网 PoC：**https://dl.bszx.site** HTTPS 上线（临时测试域名）
+  - DNS/证书/301 跳转/自动续期全部验证（docs/TLS_DEPLOYMENT.md）
+  - 公网验收 33/33：GET/HEAD/Range/SHA256 三方闭环/安全边界（docs/V02_TEST_REPORT.md）
+  - 大陆测速工具就绪：`scripts/china-speedtest.ps1`（Windows）/ `.sh`（Linux/macOS）
+  - 未测项：联通/电信/广电样本、晚高峰（20:00–23:00）样本 → **NOT TESTED**
+- [ ] 真实图片托管：**等待站长明确授权**（公网目前仅自生成测试图片）
+- [ ] 正式域名：临时域名切换成本已最小化（域名不入核心逻辑）

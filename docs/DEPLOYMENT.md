@@ -1,7 +1,9 @@
-# Pool PoC V0.1 部署手册
+# Pool PoC 部署手册
 
 > 目标服务器：156.233.227.20（香港 · Debian 12 · 50G 数据盘 /dev/vdb1）
 > 代码上传方式：SFTP（本仓库 scripts 无任何硬编码凭据，密码通过 SSH 客户端交互输入）
+> V0.2 公网部署细节（DNS/证书/443）见 [TLS_DEPLOYMENT.md](TLS_DEPLOYMENT.md) 与
+> [PUBLIC_DEPLOYMENT.md](PUBLIC_DEPLOYMENT.md)；回滚见 [ROLLBACK.md](ROLLBACK.md)。
 
 ## 1. 前置条件
 

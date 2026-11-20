@@ -59,9 +59,31 @@ echo "  HTTP 200      : $(count_status 200)"
 echo "  HTTP 206      : $(count_status 206)"
 echo "  HTTP 404      : $(count_status 404)"
 echo
-if   (( PCT >= 95 )); then echo "⚠️  严重警告: 本月流量已达预算 ${PCT}%（≥95%）"
-elif (( PCT >= 85 )); then echo "⚠️  警告: 本月流量已达预算 ${PCT}%（≥85%）"
-elif (( PCT >= 70 )); then echo "注意: 本月流量已达预算 ${PCT}%（≥70%）"
+if   (( PCT >= 95 )); then echo "⚠️  流量严重警告: 本月已达预算 ${PCT}%（≥95%）"
+elif (( PCT >= 85 )); then echo "⚠️  流量警告: 本月已达预算 ${PCT}%（≥85%）"
+elif (( PCT >= 70 )); then echo "流量 INFO: 本月已达预算 ${PCT}%（≥70%）"
 else                       echo "预算状态: 正常 (${PCT}%)"
 fi
+
+# ---- 磁盘使用率监测（数据盘预警: 60/75/85/90）----
+echo
+echo "===== 磁盘监测 ====="
+check_disk() {
+    local name="$1" path="$2" used
+    used=$(df --output=pcent "$path" 2>/dev/null | tail -1 | tr -dc '0-9')
+    case "$name" in
+      数据盘)
+        if   (( used >= 90 )); then echo "  $name: ${used}% ⚠️ 严重告警（≥90%）"
+        elif (( used >= 85 )); then echo "  $name: ${used}% ⚠️ 达 85% —— 暂停非必要新增同步"
+        elif (( used >= 75 )); then echo "  $name: ${used}% 警告（≥75%）"
+        elif (( used >= 60 )); then echo "  $name: ${used}% 关注（≥60%）"
+        else                        echo "  $name: ${used}% 正常"
+        fi
+        ;;
+      *) echo "  $name: ${used}%" ;;
+    esac
+}
+check_disk 系统盘 /
+check_disk 数据盘 /srv/pool
+echo
 echo "提醒: 此为 Pool 日志估算，非运营商结算流量；结算以服务商控制台为准。"

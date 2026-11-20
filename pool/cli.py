@@ -120,14 +120,24 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
             print(f"[3/8] 路径校验      : OK（目标已存在，sha256={existing[:16]}…，将按版本策略覆盖）")
         else:
             print(f"[3/8] 路径校验      : OK（新文件）")
-        if cfg.storage_root.exists():
-            free = shutil.disk_usage(cfg.storage_root).free
-            if free < cfg.min_free_space:
+        # 磁盘余量与挂载护栏（storage_root 尚不存在时向上探测最近存在的祖先）
+        probe = cfg.storage_root
+        while not probe.exists():
+            probe = probe.parent
+        free = shutil.disk_usage(probe).free
+        if free < cfg.min_free_space:
+            raise StorageError(
+                f"存储根剩余空间 {free} 字节低于安全余量 {cfg.min_free_space}，"
+                f"拒绝同步（数据盘保留安全余量）"
+            )
+        print(f"[3/8] 磁盘余量      : OK（剩余 {free // (1024*1024)} MB）")
+        if cfg.guard_system_disk:
+            if os.stat(probe).st_dev == os.stat("/").st_dev:
                 raise StorageError(
-                    f"存储根剩余空间 {free} 字节低于安全余量 {cfg.min_free_space}，"
-                    f"拒绝同步（数据盘保留安全余量）"
+                    "storage_root 与系统盘同设备：数据盘可能未挂载，"
+                    "拒绝同步以防误写系统盘（guard_system_disk）"
                 )
-            print(f"[3/8] 磁盘余量      : OK（剩余 {free // (1024*1024)} MB）")
+            print(f"[3/8] 数据盘挂载护栏: OK（独立设备）")
 
         # 7. 下载到隔离临时区
         tmp_path = new_tmp_file(cfg, asset.asset_id)

@@ -37,6 +37,7 @@ class PoolConfig:
     records_file: pathlib.Path
     max_file_size: int  # 单文件字节上限
     min_free_space: int  # 存储根所在盘的最小剩余空间（数据盘安全余量护栏）
+    guard_system_disk: bool  # true: storage_root 与系统盘同设备时拒绝同步（防数据盘掉挂载误写）
     allowed_formats: frozenset[str]
     upstream: UpstreamConfig
 
@@ -110,6 +111,7 @@ def load_config(path: str | pathlib.Path) -> PoolConfig:
         records_file=records_file,
         max_file_size=int(max_mb * 1024 * 1024),
         min_free_space=min_free_mb * 1024 * 1024,
+        guard_system_disk=bool(raw.get("guard_system_disk", False)),
         allowed_formats=frozenset(formats),
         upstream=upstream,
     )

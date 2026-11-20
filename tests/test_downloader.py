@@ -179,6 +179,21 @@ class TestSyncPipeline:
         assert cmd_sync(cfg, assets, "test-poc-001") == 1
         assert not (env.data_dir / "pool-tests" / "test-poc-001.png").exists()
 
+    def test_guard_system_disk_rejects_same_device(self, env):
+        """guard_system_disk=true 且 storage_root 与系统盘同设备时拒绝同步。"""
+        import os
+        same_dev = os.stat(env.data_dir.parent).st_dev == os.stat("/").st_dev
+        doc = yaml.safe_load(env.config_path.read_text(encoding="utf-8"))
+        doc["guard_system_disk"] = True
+        env.config_path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+        cfg, assets = _reload(env.config_path, env.assets_path)
+        if not same_dev:
+            import pytest as _pytest
+            _pytest.skip("pytest 临时目录与系统根不同设备，无法模拟掉挂载场景")
+        assert cmd_sync(cfg, assets, "test-poc-001") == 1
+        assert "系统盘" in read_records(cfg)[-1]["detail"]
+        assert not (env.data_dir / "pool-tests" / "test-poc-001.png").exists()
+
     def test_sync_twice_same_content(self, env):
         """同路径重复 sync 允许（revision 变更场景），内容一致。"""
         cfg, assets = _reload(env.config_path, env.assets_path)
