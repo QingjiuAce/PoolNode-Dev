@@ -56,7 +56,7 @@ def validate_relative_path(rel: str) -> str:
 def resolve_safe(storage_root: pathlib.Path, rel: str) -> pathlib.Path:
     """把 relative_path 解析为存储根内的物理路径，并复核真实路径仍在根内。
 
-    即使 rel 通过了字符校验，仍用 realpath 防御符号链接逃逸。
+    字符校验无法识别文件系统中的符号链接；这里检查解析时的真实路径。
     """
     validate_relative_path(rel)
     root = storage_root.resolve()
@@ -67,7 +67,7 @@ def resolve_safe(storage_root: pathlib.Path, rel: str) -> pathlib.Path:
 
 
 def detect_format(head: bytes) -> str | None:
-    """按 magic bytes 判定格式；无法识别返回 None。只看前 32 字节即可。"""
+    """按文件头签名识别格式，不解码图片；未识别时返回 None。"""
     if head.startswith(MAGIC_PNG):
         return "png"
     if head.startswith(MAGIC_JPEG):
@@ -86,7 +86,7 @@ def looks_like_svg(head: bytes) -> bool:
 
 
 def check_format(file_path: pathlib.Path, allowed_formats: frozenset[str]) -> str:
-    """检查文件真实格式。返回格式名；SVG 显式拒绝；未知/不允许均抛 FormatError。"""
+    """按内容签名而不是扩展名检查；先拒绝疑似 SVG，再应用格式白名单。"""
     with open(file_path, "rb") as f:
         head = f.read(512)
     if not head:
@@ -103,14 +103,11 @@ def check_format(file_path: pathlib.Path, allowed_formats: frozenset[str]) -> st
 
 def sha256_file(path: pathlib.Path, chunk_size: int = 1024 * 1024) -> str:
     """流式计算 SHA256。"""
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        while True:
-            chunk = f.read(chunk_size)
-            if not chunk:
-                break
-            h.update(chunk)
-    return h.hexdigest()
+    digest = hashlib.sha256()
+    with open(path, "rb") as file:
+        while chunk := file.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def sha256_bytes(data: bytes) -> str:

@@ -3,12 +3,12 @@
 # 部署时由 scripts/deploy.sh 用 sed 渲染占位符后写入
 #   /etc/nginx/sites-available/pool.conf
 # 占位符：__POOL_LISTEN__  __POOL_SERVER_NAME__
-# 本文件只影响 Pool 自己，不触碰其他 vhost。
+# 默认是回环 vhost；公网 HTTP/HTTPS 分别使用独立模板。
+# 与公网 HTTPS 共享静态根目录和 Pool 日志，不是公网请求的反代上游。
 # =====================================================================
 
 server {
-    # 回环测试模式:  listen 127.0.0.1:8080;  server_name _;
-    # 生产模式:      listen 80;  server_name <POOL_DOMAIN>;  （+ certbot 补 443 块）
+    # 默认绑定 127.0.0.1:8080；deploy.sh 的 POOL_LISTEN 可覆盖该值。
     listen __POOL_LISTEN__;
     server_name __POOL_SERVER_NAME__;
 

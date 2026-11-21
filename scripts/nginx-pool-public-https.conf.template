@@ -1,6 +1,7 @@
 # =====================================================================
 # Pool PoC V0.2 — 公网 HTTPS :443 段（由 deploy.sh 渲染占位符，证书存在时装载）
-# 直接静态服务 /srv/pool/data（与 8080 内部服务同根，无反代，Range/ETag 原生支持）
+# 直接静态服务 /srv/pool/data（与默认回环 vhost 同根），不经过 Python 或回环反代。
+# Nginx 原生处理 Range/ETag；它不读取授权清单，只能依据静态目录及下方规则提供文件。
 # =====================================================================
 
 server {
@@ -21,7 +22,7 @@ server {
     access_log /var/log/nginx/pool-access.log pool_traffic;
     error_log  /var/log/nginx/pool-error.log warn;
 
-    # 安全响应头
+    # noindex 是搜索引擎提示，不是访问控制；always 也对 404 等错误响应添加头部。
     add_header X-Content-Type-Options nosniff always;
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
     add_header Cache-Control "public, max-age=3600, no-transform" always;

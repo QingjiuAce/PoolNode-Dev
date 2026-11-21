@@ -13,7 +13,7 @@
 #   reports/network-tests/<日期>/summary.md            （易读汇总，未测项=NOT TESTED）
 #
 # 直连要求: 检测到代理环境变量时中止（结果不能代表真实大陆路由）。
-# 依赖: curl + sha256sum
+# 依赖: curl + sha256sum + python3；汇总使用 Bash 4+ 的关联数组。
 # =====================================================================
 set -uo pipefail
 
@@ -41,7 +41,7 @@ echo "URL  : $URL"
 echo "ISP  : $ISP (手动选择)"
 echo "时间 : $STAMP"
 
-# 代理检测（直连要求）
+# 代理检测：这里只识别环境变量，不能确认 .curlrc、系统代理或 VPN 路由。
 PROXY_DETECTED=0
 for v in HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; do
     if [[ -n "${!v:-}" ]]; then
@@ -70,7 +70,8 @@ if command -v ping >/dev/null; then
     echo "--- ping ---"; echo "  $PING_LINE"
 fi
 
-# 下载轮次
+# 每轮启动独立 curl 进程，不复用上轮连接。curl 的 time_* 是从请求开始计时的累计值。
+# JSON 由下方 Python 脚本生成；仅有汇总条目不代表下载成功。
 W='code=%{http_code} dns=%{time_namelookup} tcp=%{time_connect} tls=%{time_appconnect} ttfb=%{time_starttransfer} total=%{time_total} speed=%{speed_download} size=%{size_download}'
 ROUNDS_JSON=""
 SPEEDS=""

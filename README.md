@@ -18,13 +18,13 @@ pool-poc CLI（授权→下载→SHA256→原子发布）
 https://<POOL_DOMAIN>/<repo相对路径>
 ```
 
-详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+详见 [架构设计](docs/ARCHITECTURE.md)；从源码接手请看 [源码导览](docs/CODE_ARCHITECTURE_MAP.md) 和 [维护风格](docs/CODE_STYLE_GUIDE.md)。
 
 ## 快速开始（本地开发）
 
 ```bash
 pip install -r requirements.txt pytest
-python -m pytest tests/          # 76 项自动化测试
+python -m pytest tests/
 ```
 
 ## 快速开始（服务器部署）

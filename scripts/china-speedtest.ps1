@@ -40,7 +40,8 @@ Write-Host "URL  : $Url"
 Write-Host "ISP  : $Isp  (manually selected)"
 Write-Host "Time : $Stamp"
 
-# ---- proxy detection (warn & abort: results would be meaningless) ----
+# ---- proxy signals (not a guarantee of the effective route) ----
+# The .curlrc check below runs only when an environment or WinINET proxy is found.
 $proxyVars = @($env:HTTP_PROXY, $env:HTTPS_PROXY, $env:ALL_PROXY, $env:http_proxy, $env:https_proxy, $env:all_proxy) | Where-Object { $_ }
 $wininet = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction SilentlyContinue
 $wininetProxyOn = ($wininet.ProxyEnable -eq 1 -and $wininet.ProxyServer)
@@ -98,6 +99,9 @@ try {
 Write-Host ("  sent={0} received={1} avg={2}ms" -f $ping.sent, $ping.received, $(if ($ping.avgMs) { $ping.avgMs } else { "N/A" }))
 
 # ---- download rounds ----
+# Each round starts a fresh curl process, so it does not reuse the prior connection.
+# Curl time_* values are cumulative from request start. In the report, tls_s is
+# time until TLS completes, not TLS duration; for a cold HTTPS request, subtract tcp_s.
 $fmt = 'code=%{http_code} dns=%{time_namelookup} tcp=%{time_connect} tls=%{time_appconnect} ttfb=%{time_starttransfer} total=%{time_total} speed=%{speed_download} size=%{size_download}'
 $roundResults = New-Object System.Collections.Generic.List[object]
 $tmpFile = Join-Path $env:TEMP ("pool-dl-" + [guid]::NewGuid().ToString() + ".bin")

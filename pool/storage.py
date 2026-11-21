@@ -17,7 +17,14 @@ from .validator import fsync_dir, resolve_safe
 
 
 class StorageError(Exception):
-    pass
+    """存储操作拒绝了目标路径或文件状态。"""
+
+
+def _replace_public_file(source: pathlib.Path, destination: pathlib.Path) -> None:
+    """必要时先恢复写权限，以便在 Windows 上覆盖已有的只读文件。"""
+    if destination.exists():
+        os.chmod(destination, 0o644)
+    os.replace(source, destination)
 
 
 def ensure_dirs(cfg: PoolConfig) -> None:
@@ -40,7 +47,7 @@ def publish(cfg: PoolConfig, tmp_path: pathlib.Path, relative_path: str) -> path
 
     - 目标路径经 resolve_safe 双层校验；
     - 同一文件系统直接 os.replace()；跨文件系统退化为“写 .staging + fsync + replace”；
-    - 发布后设为 0444（只读），防止运行期被改写。
+    - 发布后设为 0444（只读），避免运行期意外改写。
     """
     final = resolve_safe(cfg.storage_root, relative_path)
     final.parent.mkdir(parents=True, exist_ok=True)
@@ -49,20 +56,16 @@ def publish(cfg: PoolConfig, tmp_path: pathlib.Path, relative_path: str) -> path
     root_dev = os.stat(cfg.storage_root).st_dev if cfg.storage_root.exists() else tmp_dev
 
     if tmp_dev == root_dev:
-        if final.exists():
-            # Windows 上 os.replace 不能覆盖只读文件；POSIX 上此调用无害
-            os.chmod(final, 0o644)
-        os.replace(tmp_path, final)
+        _replace_public_file(tmp_path, final)
     else:
+        # 先在目标文件系统写完并同步，再替换公开文件名。
         stage = final.parent / f".{final.name}.staging-{os.getpid()}"
         with open(tmp_path, "rb") as src, open(stage, "wb") as dst:
             while chunk := src.read(1024 * 1024):
                 dst.write(chunk)
             dst.flush()
             os.fsync(dst.fileno())
-        if final.exists():
-            os.chmod(final, 0o644)
-        os.replace(stage, final)
+        _replace_public_file(stage, final)
         tmp_path.unlink(missing_ok=True)
 
     os.chmod(final, 0o444)
@@ -71,13 +74,14 @@ def publish(cfg: PoolConfig, tmp_path: pathlib.Path, relative_path: str) -> path
 
 
 def stored_path(cfg: PoolConfig, relative_path: str) -> pathlib.Path:
+    """返回相对路径在公开存储根中解析出的路径，不检查文件是否存在。"""
     return resolve_safe(cfg.storage_root, relative_path)
 
 
 def remove_file(cfg: PoolConfig, relative_path: str) -> pathlib.Path:
     """删除白名单资产对应的物理文件。
 
-    只接受能通过安全解析的路径；拒绝目录、符号链接与不存在的文件。
+    目标必须通过安全解析；随后在解析结果上检查符号链接、存在性与目录状态。
     """
     target = resolve_safe(cfg.storage_root, relative_path)
     if target.is_symlink():
@@ -97,7 +101,7 @@ def remove_file(cfg: PoolConfig, relative_path: str) -> pathlib.Path:
 
 
 def record(cfg: PoolConfig, event: dict) -> None:
-    """追加一条 JSONL 操作记录（时间戳自动补全）。"""
+    """追加一条 JSONL 操作记录；调用方未提供时间戳时自动补全。"""
     ensure_dirs(cfg)
     event = {"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"), **event}
     with open(cfg.records_file, "a", encoding="utf-8") as f:

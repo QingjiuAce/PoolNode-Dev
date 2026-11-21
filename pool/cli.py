@@ -6,7 +6,8 @@
     pool-poc --config /etc/pool-poc/config.yaml verify  <asset_id>
     pool-poc --config /etc/pool-poc/config.yaml remove  <asset_id>
 
-生产配置路径默认 /etc/pool-poc/config.yaml，测试时用 --config 覆盖。
+CLI 负责串联流程、呈现结果与映射退出码；授权、网络、文件检查和
+落盘分别交给 permissions、downloader、validator 和 storage。
 """
 
 from __future__ import annotations
@@ -65,7 +66,7 @@ def _load_all(config_path: str) -> tuple[PoolConfig, list[Asset]]:
 def cmd_check_upstream(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
     """上游连通性诊断。不保存任何字节到公开目录。"""
     asset = get_asset(assets, asset_id)
-    url = validate_source_url(asset, cfg.upstream.allowed_hosts, cfg.upstream.allow_loopback_http)
+    validate_source_url(asset, cfg.upstream.allowed_hosts, cfg.upstream.allow_loopback_http)
 
     print(f"asset_id        : {asset.asset_id}")
     print(f"permission      : {asset.permission_status} (evidence: {'yes' if asset.permission_evidence else 'NO'})")
@@ -97,15 +98,36 @@ def cmd_check_upstream(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> i
     return 0
 
 
-# ---------------------------------------------------------------- sync
+def _check_storage_capacity(cfg: PoolConfig) -> None:
+    # 存储根可能尚未创建；从最近存在的祖先确认目标文件系统。
+    probe = cfg.storage_root
+    while not probe.exists():
+        probe = probe.parent
+    free = shutil.disk_usage(probe).free
+    if free < cfg.min_free_space:
+        raise StorageError(
+            f"存储根剩余空间 {free} 字节低于安全余量 {cfg.min_free_space}，"
+            f"拒绝同步（数据盘保留安全余量）"
+        )
+    print(f"[3/8] 磁盘余量      : OK（剩余 {free // (1024 * 1024)} MB）")
+
+    if not cfg.guard_system_disk:
+        return
+    if os.stat(probe).st_dev == os.stat("/").st_dev:
+        raise StorageError(
+            "storage_root 与系统盘同设备：数据盘可能未挂载，"
+            "拒绝同步以防误写系统盘（guard_system_disk）"
+        )
+    print("[3/8] 数据盘挂载护栏: OK（独立设备）")
+
 
 def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
-    """完整同步流水线。任一环节失败都不在公开目录留下文件。"""
+    """先授权，再暂存和校验单个资产，最后发布。"""
     asset: Asset | None = None
     tmp_path: Path | None = None
     try:
         asset = get_asset(assets, asset_id)
-        # 1-4. 授权关
+        # 先拒绝未授权资产，避免产生网络请求或临时文件。
         check_permission(asset)
         print(f"[1/8] 授权检查      : OK（{asset.permission_status}，证据已登记）")
 
@@ -120,26 +142,9 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
             print(f"[3/8] 路径校验      : OK（目标已存在，sha256={existing[:16]}…，将按版本策略覆盖）")
         else:
             print(f"[3/8] 路径校验      : OK（新文件）")
-        # 磁盘余量与挂载护栏（storage_root 尚不存在时向上探测最近存在的祖先）
-        probe = cfg.storage_root
-        while not probe.exists():
-            probe = probe.parent
-        free = shutil.disk_usage(probe).free
-        if free < cfg.min_free_space:
-            raise StorageError(
-                f"存储根剩余空间 {free} 字节低于安全余量 {cfg.min_free_space}，"
-                f"拒绝同步（数据盘保留安全余量）"
-            )
-        print(f"[3/8] 磁盘余量      : OK（剩余 {free // (1024*1024)} MB）")
-        if cfg.guard_system_disk:
-            if os.stat(probe).st_dev == os.stat("/").st_dev:
-                raise StorageError(
-                    "storage_root 与系统盘同设备：数据盘可能未挂载，"
-                    "拒绝同步以防误写系统盘（guard_system_disk）"
-                )
-            print(f"[3/8] 数据盘挂载护栏: OK（独立设备）")
+        _check_storage_capacity(cfg)
 
-        # 7. 下载到隔离临时区
+        # 在公开目录外暂存，避免让不完整的下载被对外提供。
         tmp_path = new_tmp_file(cfg, asset.asset_id)
         _, content_type, size = download_to_file(
             asset.source_url, cfg.upstream, tmp_path, cfg.max_file_size

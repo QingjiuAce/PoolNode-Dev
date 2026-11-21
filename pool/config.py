@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-# 允许发布的真实图片格式（magic bytes 判定，SVG 不在列表中即被拒绝）
+# 按文件内容识别格式，不信任扩展名；这里只允许栅格图片。
 KNOWN_FORMATS = frozenset({"jpeg", "png", "gif", "webp"})
 
 
@@ -48,8 +48,16 @@ def _require(data: dict[str, Any], key: str) -> Any:
     return data[key]
 
 
+def _require_absolute_path(data: dict[str, Any], key: str) -> pathlib.Path:
+    """读取必须独立于当前工作目录的配置路径。"""
+    path = pathlib.Path(str(_require(data, key)))
+    if not path.is_absolute():
+        raise ConfigError(f"{key} 必须是绝对路径: {path}")
+    return path
+
+
 def load_config(path: str | pathlib.Path) -> PoolConfig:
-    """读取并校验配置文件。任何语义错误都在启动时立即失败。"""
+    """加载 YAML，并在启动时检查配置值与目录布局。"""
     p = pathlib.Path(path)
     try:
         raw = yaml.safe_load(p.read_text(encoding="utf-8"))
@@ -60,12 +68,9 @@ def load_config(path: str | pathlib.Path) -> PoolConfig:
     if not isinstance(raw, dict):
         raise ConfigError(f"配置文件顶层必须是映射: {p}")
 
-    storage_root = pathlib.Path(str(_require(raw, "storage_root")))
-    if not storage_root.is_absolute():
-        raise ConfigError(f"storage_root 必须是绝对路径: {storage_root}")
-    tmp_dir = pathlib.Path(str(_require(raw, "tmp_dir")))
-    if not tmp_dir.is_absolute():
-        raise ConfigError(f"tmp_dir 必须是绝对路径: {tmp_dir}")
+    storage_root = _require_absolute_path(raw, "storage_root")
+    tmp_dir = _require_absolute_path(raw, "tmp_dir")
+    # 按配置路径比较，避免将未校验的下载直接放入公开目录。
     if tmp_dir == storage_root or storage_root in tmp_dir.parents:
         raise ConfigError("tmp_dir 不得位于 storage_root 内部（临时区必须与公开区隔离）")
 
