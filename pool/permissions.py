@@ -42,6 +42,7 @@ class Asset:
     license: str
     expected_sha256: str | None
     revision: int
+    size_bytes: int | None = None  # optional download-client metadata
 
 
 ASSET_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
@@ -76,7 +77,11 @@ def _parse_asset(raw: dict, index: int) -> Asset:
     if revision < 1:
         raise AssetConfigError(f"{where} ({asset_id}): revision 必须 >= 1")
 
+    size = raw.get("size_bytes")
+    if size is not None and (type(size) is not int or size < 1):
+        raise AssetConfigError(f"{where} ({asset_id}): size_bytes 必须是正整数")
     return Asset(
+        size_bytes=size,
         asset_id=asset_id,
         source_url=str(raw.get("source_url", "")).strip(),
         relative_path=str(raw.get("relative_path", "")).strip(),
