@@ -39,7 +39,7 @@ def _device_model(monkeypatch, marker: pathlib.Path, system_prefixes=(),
         for prefix in prefixes:
             if s == prefix or s.startswith(prefix + os.sep):
                 return SYSTEM_DEVICE
-        return default
+        return marker.parent.stat().st_dev if default == SAFE_DEVICE else default
 
     monkeypatch.setattr(storage, "_system_root", lambda: marker)
     monkeypatch.setattr(storage, "_directory_device", device)
@@ -89,9 +89,9 @@ def _run_sync(tmp_path, monkeypatch, mode, png_bytes, system_prefixes=(),
     calls: list[pathlib.Path] = []
 
     def stub_download(url, cfg, dest, max_size):
-        calls.append(dest)
+        calls.append(dest if isinstance(dest, pathlib.Path) else next((tmp_path / "tmp").glob("*.part")))
         body = b"corrupt" if corrupt else png_bytes
-        dest.write_bytes(body)
+        (dest.write_bytes if isinstance(dest, pathlib.Path) else dest.write)(body)
         return dest, "image/png", len(body)
 
     monkeypatch.setattr(cli, "download_to_file", stub_download)
@@ -244,7 +244,7 @@ def test_sync_guard_disabled_never_probes_devices(tmp_path, monkeypatch):
     _write_assets(tmp_path, sha256_of(png))
 
     def stub(url, cfg, dest, max_size):
-        dest.write_bytes(png)
+        (dest.write_bytes if isinstance(dest, pathlib.Path) else dest.write)(png)
         return dest, "image/png", len(png)
 
     def boom(path):
@@ -266,7 +266,7 @@ def test_sync_device_probe_error_fails_closed(tmp_path, monkeypatch):
 
     def stub(url, cfg, dest, max_size):
         calls.append(dest)
-        dest.write_bytes(png)
+        (dest.write_bytes if isinstance(dest, pathlib.Path) else dest.write)(png)
         return dest, "image/png", len(png)
 
     def boom(path):
@@ -292,13 +292,16 @@ def test_sync_refuses_before_writes_when_space_check_fails(tmp_path, monkeypatch
         return type("Usage", (), {"free": free_bytes})()
 
     monkeypatch.setattr(cli.shutil, "disk_usage", disk_usage)
-    code, _, calls = _run_sync(tmp_path, monkeypatch, True, png)
+    code, config_path, calls = _run_sync(tmp_path, monkeypatch, True, png)
     assert code == 1
     assert "余量" in capsys.readouterr().err
     assert not calls
     assert not (tmp_path / "data").exists()
     assert not (tmp_path / "tmp").exists()
-    assert not (tmp_path / "logs").exists()
+    if free_bytes is None:
+        assert not (tmp_path / "logs").exists()
+    else:
+        assert read_records(load_config(config_path))[0]["result"] == "rejected"
 
 
 def test_sync_creates_missing_directories_on_success(tmp_path, monkeypatch):
@@ -311,7 +314,7 @@ def test_sync_creates_missing_directories_on_success(tmp_path, monkeypatch):
     _write_assets(tmp_path, sha256_of(png))
 
     def stub(url, cfg, dest, max_size):
-        dest.write_bytes(png)
+        (dest.write_bytes if isinstance(dest, pathlib.Path) else dest.write)(png)
         return dest, "image/png", len(png)
 
     monkeypatch.setattr(cli, "download_to_file", stub)
@@ -357,8 +360,8 @@ def test_sync_refuses_publication_if_device_changes_after_download(tmp_path, mon
     stages = []
 
     def stub_download(url, cfg, dest, max_size):
-        stages.append(dest)
-        dest.write_bytes(png)
+        stages.append(next((tmp_path / "tmp").glob("*.part")))
+        (dest.write_bytes if isinstance(dest, pathlib.Path) else dest.write)(png)
         _device_model(monkeypatch, marker, system_prefixes=(tmp_path / "data",))
         return dest, "image/png", len(png)
 
@@ -375,7 +378,8 @@ def test_sync_refuses_publication_if_device_changes_after_download(tmp_path, mon
 def test_publish_rechecks_guard_before_replace(tmp_path, monkeypatch):
     cfg = load_config(_write_guard_config(tmp_path, True))
     png = make_png(tmp_path / "src.png", 8, 8, seed=7)
-    staging = tmp_path / "staging.bin"
+    cfg.tmp_dir.mkdir()
+    staging = cfg.tmp_dir / "staging.bin"
     staging.write_bytes(png)
     _device_model(monkeypatch, tmp_path / "system-root-marker",
                   system_prefixes=(tmp_path,))
@@ -388,7 +392,8 @@ def test_publish_rechecks_guard_before_replace(tmp_path, monkeypatch):
 def test_publish_succeeds_on_independent_device(tmp_path, monkeypatch):
     cfg = load_config(_write_guard_config(tmp_path, True))
     png = make_png(tmp_path / "src.png", 8, 8, seed=7)
-    staging = tmp_path / "staging.bin"
+    cfg.tmp_dir.mkdir()
+    staging = cfg.tmp_dir / "staging.bin"
     staging.write_bytes(png)
     _device_model(monkeypatch, tmp_path / "system-root-marker")
     final = storage.publish(cfg, staging, REL_PATH)

@@ -12,6 +12,8 @@ import os
 import pathlib
 import posixpath
 import re
+from contextlib import nullcontext
+from typing import BinaryIO
 
 # 段级规则：不允许空段、'.'、'..'、以点开头的隐藏段；总深度受限
 SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -85,9 +87,9 @@ def looks_like_svg(head: bytes) -> bool:
     return sample.startswith((b"<?xml", b"<svg", b"<!--")) and b"<svg" in head[:512].lower()
 
 
-def check_format(file_path: pathlib.Path, allowed_formats: frozenset[str]) -> str:
+def check_format(file_path: pathlib.Path | BinaryIO, allowed_formats: frozenset[str]) -> str:
     """按内容签名而不是扩展名检查；先拒绝疑似 SVG，再应用格式白名单。"""
-    with open(file_path, "rb") as f:
+    with (open(file_path, "rb") if isinstance(file_path, (str, bytes, os.PathLike)) else nullcontext(file_path)) as f:
         head = f.read(512)
     if not head:
         raise FormatError("文件为空")
@@ -101,10 +103,10 @@ def check_format(file_path: pathlib.Path, allowed_formats: frozenset[str]) -> st
     return fmt
 
 
-def sha256_file(path: pathlib.Path, chunk_size: int = 1024 * 1024) -> str:
+def sha256_file(path: pathlib.Path | BinaryIO, chunk_size: int = 1024 * 1024) -> str:
     """流式计算 SHA256。"""
     digest = hashlib.sha256()
-    with open(path, "rb") as file:
+    with (open(path, "rb") if isinstance(path, (str, bytes, os.PathLike)) else nullcontext(path)) as file:
         while chunk := file.read(chunk_size):
             digest.update(chunk)
     return digest.hexdigest()

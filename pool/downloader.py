@@ -14,7 +14,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import nullcontext
 from pathlib import Path
+from typing import BinaryIO
 
 from .config import UpstreamConfig
 
@@ -241,13 +243,9 @@ def check_upstream(source_url: str, cfg: UpstreamConfig) -> dict:
     return result
 
 
-def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path,
-                     max_size: int) -> tuple[Path, str, int]:
-    """流式下载到 dest（临时文件，由调用方保证不在公开目录）。
-
-    返回 (dest, content_type, bytes_written)。超限抛 SizeLimitExceeded，
-    由调用方负责清理临时文件。
-    """
+def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path | BinaryIO,
+                     max_size: int) -> tuple[Path | BinaryIO, str, int]:
+    """流式下载到暂存路径或由调用方持有的已打开文件。"""
     _url_allowed(source_url, cfg)
     req = urllib.request.Request(source_url, headers={"User-Agent": "pool-poc/0.1 (+sync)"})
     opener = _build_opener(cfg)
@@ -275,7 +273,7 @@ def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path,
 
         written = 0
         try:
-            with open(dest, "wb") as f:
+            with (open(dest, "wb") if isinstance(dest, Path) else nullcontext(dest)) as f:
                 while True:
                     chunk = resp.read(CHUNK_SIZE)
                     if not chunk:
@@ -287,10 +285,11 @@ def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path,
                         )
                     f.write(chunk)
         except (socket.timeout, TimeoutError) as e:
-            dest.unlink(missing_ok=True)
+            if isinstance(dest, Path):
+                dest.unlink(missing_ok=True)
             raise TimeoutFail(f"下载中途超时（已写 {written}）") from e
         except Exception:
-            # 任何失败都不得留下部分写入的临时文件
-            dest.unlink(missing_ok=True)
+            if isinstance(dest, Path):
+                dest.unlink(missing_ok=True)
             raise
     return dest, content_type, written

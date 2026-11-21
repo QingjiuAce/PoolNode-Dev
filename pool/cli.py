@@ -13,6 +13,7 @@ CLI 负责串联流程、呈现结果与映射退出码；授权、网络、文�
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import os
 import shutil
 import sys
@@ -35,14 +36,16 @@ from .permissions import (
     validate_source_url,
 )
 from .storage import (
+    FilesystemError,
     StorageError,
+    audit_writer,
+    guarded_staging,
     SystemDiskGuardError,
     check_system_disk,
     last_record_for,
     new_tmp_file,
     publish,
     record,
-    record_sync,
     remove_file,
     stored_path,
 )
@@ -113,8 +116,7 @@ def _check_storage_capacity(cfg: PoolConfig) -> None:
             raise
         raise SystemDiskGuardError("无法确认存储盘余量，拒绝同步（guard_system_disk）") from exc
     if free < cfg.min_free_space:
-        error_type = SystemDiskGuardError if cfg.guard_system_disk else StorageError
-        raise error_type(
+        raise StorageError(
             f"存储根剩余空间 {free} 字节低于安全余量 {cfg.min_free_space}，"
             f"拒绝同步（数据盘保留安全余量）"
         )
@@ -125,6 +127,8 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
     """先授权，再暂存和校验单个资产，最后发布。"""
     asset: Asset | None = None
     tmp_path: Path | None = None
+    resources = ExitStack()
+    published = False
     try:
         asset = get_asset(assets, asset_id)
         # 先拒绝未授权资产，避免产生网络请求或临时文件。
@@ -153,9 +157,20 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
             print("[3/8] 数据盘挂载护栏: OK（独立设备）")
 
         # 在公开目录外暂存，避免让不完整的下载被对外提供。
-        tmp_path = new_tmp_file(cfg, asset.asset_id)
+        if cfg.guard_system_disk:
+            # Check the real audit file before any staging or download.
+            try:
+                with audit_writer(cfg, preflight=True):
+                    pass
+            except StorageError as exc:
+                raise SystemDiskGuardError(f"审计预检未通过: {exc}") from exc
+            stage = resources.enter_context(guarded_staging(cfg, asset.asset_id))
+            destination = stage.stream
+        else:
+            tmp_path = new_tmp_file(cfg, asset.asset_id)
+            stage = destination = tmp_path
         _, content_type, size = download_to_file(
-            asset.source_url, cfg.upstream, tmp_path, cfg.max_file_size
+            asset.source_url, cfg.upstream, destination, cfg.max_file_size
         )
         print(f"[4/8] 流式下载      : OK {size} bytes（Content-Type: {content_type or '未知'}）")
 
@@ -167,11 +182,15 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
         print(f"[5/8] 大小检查      : OK（{size} <= {cfg.max_file_size}）")
 
         # 9. 真实格式关（magic bytes，不信任扩展名与 Content-Type）
-        fmt = check_format(tmp_path, cfg.allowed_formats)
+        if cfg.guard_system_disk:
+            destination.seek(0)
+        fmt = check_format(destination, cfg.allowed_formats)
         print(f"[6/8] 格式检查      : OK（实测 {fmt}）")
 
         # 10-11. SHA256 关
-        local_sha = sha256_file(tmp_path)
+        if cfg.guard_system_disk:
+            destination.seek(0)
+        local_sha = sha256_file(destination)
         if asset.expected_sha256:
             if local_sha != asset.expected_sha256:
                 raise StorageError(
@@ -185,12 +204,13 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
                   f"本地计算 {local_sha}（不视为完成官方一致性验证）")
 
         # 12. 原子发布
-        final = publish(cfg, tmp_path, asset.relative_path)
+        final = publish(cfg, stage, asset.relative_path)
+        published = True
         tmp_path = None  # publish 已转移所有权
         print(f"[8/8] 原子发布      : OK -> {final}")
 
         # 13. 同步记录
-        record_sync(cfg, {
+        record(cfg, {
             "action": "sync",
             "asset_id": asset.asset_id,
             "revision": asset.revision,
@@ -206,13 +226,20 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
         return 0
     except SystemDiskGuardError as e:
         # The audit directory may be on the same unmounted volume as the data.
+        if published:
+            print("文件已发布，但审计未完成", file=sys.stderr)
         print(f"\nFAIL: {e}", file=sys.stderr)
         return 1
-    except (PermissionError, PathError, UpstreamError, FormatError, StorageError) as e:
+    except (PermissionError, PathError, UpstreamError, FormatError, StorageError, OSError) as e:
+        if isinstance(e, OSError):
+            e = FilesystemError("同步文件操作", e)
         print(f"\nFAIL: {e}", file=sys.stderr)
+        if published:
+            print("文件已发布，但审计未完成", file=sys.stderr)
+            return 1
         reason = getattr(e, "reason", None) or getattr(e, "kind", None) or "sync_failed"
         try:
-            record_sync(cfg, {
+            record(cfg, {
                 "action": "sync",
                 "asset_id": asset_id,
                 "revision": asset.revision if asset else None,
@@ -221,13 +248,17 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
                 "reason": str(reason),
                 "detail": str(e),
             })
-        except SystemDiskGuardError as audit_error:
+        except (StorageError, OSError) as audit_error:
             print(f"审计未写入: {audit_error}", file=sys.stderr)
         return 1
     finally:
-        if tmp_path is not None and tmp_path.exists():
-            tmp_path.unlink(missing_ok=True)
-            print(f"cleanup: 已清理临时文件 {tmp_path}", file=sys.stderr)
+        try:
+            resources.close()
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+        except OSError as exc:
+            print(FilesystemError("清理暂存文件", exc), file=sys.stderr)
+
 
 
 # ---------------------------------------------------------------- verify
@@ -284,20 +315,30 @@ def cmd_remove(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
     except PermissionError as e:
         print(f"DENIED [{e.reason}]: {e}", file=sys.stderr)
         return 1
+    removed = None
     try:
-        removed = remove_file(cfg, asset.relative_path)
-    except StorageError as e:
-        print(f"FAIL: {e}", file=sys.stderr)
-        record(cfg, {
-            "action": "remove", "asset_id": asset.asset_id,
-            "relative_path": asset.relative_path, "result": "error", "detail": str(e),
-        })
+        with audit_writer(cfg) as (append, verify_audit):
+            try:
+                removed = remove_file(cfg, asset.relative_path, before_unlink=verify_audit)
+            except (StorageError, PathError, OSError) as error:
+                print(f"FAIL: {error}", file=sys.stderr)
+                if not isinstance(error, SystemDiskGuardError):
+                    append({
+                        "action": "remove", "asset_id": asset.asset_id,
+                        "relative_path": asset.relative_path, "result": "error",
+                        "detail": str(error),
+                    })
+                return 1
+            append({
+                "action": "remove", "asset_id": asset.asset_id, "revision": asset.revision,
+                "relative_path": asset.relative_path, "removed_path": str(removed),
+                "result": "removed",
+            })
+    except (StorageError, OSError) as exc:
+        if removed is not None:
+            print("文件已删除，但审计未完成", file=sys.stderr)
+        print(f"FAIL: {exc}", file=sys.stderr)
         return 1
-    record(cfg, {
-        "action": "remove", "asset_id": asset.asset_id, "revision": asset.revision,
-        "relative_path": asset.relative_path, "removed_path": str(removed),
-        "result": "removed",
-    })
     print(f"REMOVED: {removed}")
     print("对外下载路径已失效（Nginx 将返回 404）。")
     return 0
