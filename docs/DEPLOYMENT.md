@@ -129,3 +129,18 @@ sudo userdel pool
 
 见 [CHINA-TEST.md](CHINA-TEST.md)：在大陆电脑运行 `scripts/china-speedtest.sh`，
 分别在空闲时段与北京时间 20:00–23:00 各测一次，覆盖联通/电信/移动/广电。
+
+## 6. 运维事件记录
+
+**2026-11-21 08:31 · 重启后 sshd 失联（已修复）**
+
+- 现象：机器重启后 :22 被拒（`sshd: no hostkeys available -- exiting`），
+  `/etc/ssh` 主机密钥丢失；nginx/数据盘/证书/Pool 均自动恢复无恙。
+- 处置：VNC 执行 `ssh-keygen -A && systemctl restart ssh` 恢复；
+  密钥备份至 `/opt/pool-poc/backup/hostkeys/`；
+  增加 `/etc/systemd/system/ssh.service.d/override.conf`
+  （`ExecStartPre=/usr/bin/ssh-keygen -A`，幂等自愈）。
+- 教训：systemd ExecStartPre 不经 shell，**通配符不会展开**（曾用
+  `chmod /etc/ssh/ssh_host_*_key` 导致二次失败，已移除该行）。
+- 遗留观察：密钥为何在重启后丢失原因未明（/etc 在系统盘，理论不应丢失），
+  若再次出现建议排查服务商重启/快照机制。
