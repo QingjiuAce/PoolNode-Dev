@@ -1,0 +1,61 @@
+﻿{
+    "test_time":  "2026-11-21 07:26:53+08:00",
+    "isp":  "mobile",
+    "isp_source":  "manually selected",
+    "url":  "https://dl.bszx.site/submissions/originals/pool-public-smoke-test.jpg",
+    "host":  "dl.bszx.site",
+    "dns_ok":  true,
+    "dns_a":  "156.233.227.20",
+    "ping":  {
+                 "sent":  4,
+                 "avgMs":  49.2,
+                 "received":  4
+             },
+    "rounds":  [
+                   {
+                       "round":  1,
+                       "status":  "ok",
+                       "http_code":  "200",
+                       "dns_s":  "0.004829",
+                       "tcp_s":  "0.065533",
+                       "tls_s":  "0.129183",
+                       "ttfb_s":  "0.233354",
+                       "total_s":  "0.518593",
+                       "speed_Bps":  "3429498",
+                       "size_bytes":  "1778514",
+                       "sha256":  "b60435075bfccd82ecb6fc20706276b0df2559c8f816bc933dbfc6ac7eaa932e",
+                       "error":  null
+                   },
+                   {
+                       "round":  2,
+                       "status":  "ok",
+                       "http_code":  "200",
+                       "dns_s":  "0.010322",
+                       "tcp_s":  "0.072597",
+                       "tls_s":  "0.137049",
+                       "ttfb_s":  "0.242296",
+                       "total_s":  "0.528666",
+                       "speed_Bps":  "3364154",
+                       "size_bytes":  "1778514",
+                       "sha256":  "b60435075bfccd82ecb6fc20706276b0df2559c8f816bc933dbfc6ac7eaa932e",
+                       "error":  null
+                   },
+                   {
+                       "round":  3,
+                       "status":  "ok",
+                       "http_code":  "200",
+                       "dns_s":  "0.005381",
+                       "tcp_s":  "0.064061",
+                       "tls_s":  "0.124853",
+                       "ttfb_s":  "0.227435",
+                       "total_s":  "0.537207",
+                       "speed_Bps":  "3310667",
+                       "size_bytes":  "1778514",
+                       "sha256":  "b60435075bfccd82ecb6fc20706276b0df2559c8f816bc933dbfc6ac7eaa932e",
+                       "error":  null
+                   }
+               ],
+    "wininet_proxy_present":  true,
+    "wininet_bypassed_by_curl":  true,
+    "notes":  "direct connection (curl.exe); proxy checked before run"
+}

@@ -1,0 +1,49 @@
+# =====================================================================
+# Pool PoC V0.2 — 公网 HTTPS :443 段（由 deploy.sh 渲染占位符，证书存在时装载）
+# 直接静态服务 /srv/pool/data（与 8080 内部服务同根，无反代，Range/ETag 原生支持）
+# =====================================================================
+
+server {
+    listen 443 ssl http2;
+    server_name __POOL_SERVER_NAME__;
+
+    ssl_certificate     __POOL_CERT_FULLCHAIN__;
+    ssl_certificate_key __POOL_CERT_PRIVKEY__;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:pool_ssl:10m;
+    ssl_session_timeout 1d;
+
+    server_tokens off;
+
+    root /srv/pool/data;
+
+    access_log /var/log/nginx/pool-access.log pool_traffic;
+    error_log  /var/log/nginx/pool-error.log warn;
+
+    # 安全响应头
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Cache-Control "public, max-age=3600, no-transform" always;
+
+    # 站点根路径不是资产
+    location = / {
+        return 404;
+    }
+
+    # 静态文件：仅 GET/HEAD；存在则服务（含 Range/ETag/Last-Modified），否则精确 404
+    location / {
+        limit_except GET HEAD {
+            deny all;
+        }
+        try_files $uri =404;
+    }
+
+    # 隐藏文件与日志/配置后缀一律 404，不泄露存在性与磁盘路径
+    location ~ /\. {
+        return 404;
+    }
+    location ~* \.(log|jsonl|yaml|yml|part|staging.*)$ {
+        return 404;
+    }
+}

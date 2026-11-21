@@ -1,0 +1,50 @@
+# =====================================================================
+# Pool PoC V0.1 — Nginx 独立 vhost 模板
+# 部署时由 scripts/deploy.sh 用 sed 渲染占位符后写入
+#   /etc/nginx/sites-available/pool.conf
+# 占位符：__POOL_LISTEN__  __POOL_SERVER_NAME__
+# 本文件只影响 Pool 自己，不触碰其他 vhost。
+# =====================================================================
+
+server {
+    # 回环测试模式:  listen 127.0.0.1:8080;  server_name _;
+    # 生产模式:      listen 80;  server_name <POOL_DOMAIN>;  （+ certbot 补 443 块）
+    listen __POOL_LISTEN__;
+    server_name __POOL_SERVER_NAME__;
+
+    # 隐藏 Nginx 版本信息（Server: nginx 而非 nginx/1.22.1）
+    server_tokens off;
+
+    root /srv/pool/data;
+
+    # Pool 专属访问日志：含发送字节与响应耗时，用于流量统计
+    access_log /var/log/nginx/pool-access.log pool_traffic;
+    error_log  /var/log/nginx/pool-error.log warn;
+
+    # 安全响应头
+    add_header X-Content-Type-Options nosniff always;
+    add_header Cache-Control "public, max-age=3600, no-transform" always;
+
+    # 站点根路径本身不是资产
+    location = / {
+        return 404;
+    }
+
+    # 静态文件：存在则服务（含 Range/ETag/Last-Modified），不存在精确 404
+    # $uri 只匹配文件；目录会落到 nginx 默认索引逻辑（autoindex off => 403）
+    # 仅允许 GET / HEAD；其余方法（PUT/POST/DELETE 等）一律 403
+    location / {
+        limit_except GET HEAD {
+            deny all;
+        }
+        try_files $uri =404;
+    }
+
+    # 隐藏文件与日志/配置后缀一律 404，不泄露存在性
+    location ~ /\. {
+        return 404;
+    }
+    location ~* \.(log|jsonl|yaml|yml|part|staging.*)$ {
+        return 404;
+    }
+}

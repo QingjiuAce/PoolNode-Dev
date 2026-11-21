@@ -1,0 +1,30 @@
+# =====================================================================
+# Pool PoC V0.1 运行配置示例（生产）
+# ---------------------------------------------------------------------
+# 部署时复制到 /etc/pool-poc/config.yaml 并按实际路径调整。
+# 权限要求：root:pool 0640。本文件不含任何凭据。
+#
+# 存储预算（站长确认）：
+#   系统盘 30G —— 系统/Nginx/程序/系统日志/更新余量
+#   数据盘 50G —— 原图(data/) + 同步临时文件(tmp/) + 同步记录(var/)
+#                初期最多使用约 40G，保留 10G 安全余量
+# =====================================================================
+
+storage_root: /srv/pool/data        # Nginx 公开文件根（数据盘）
+tmp_dir: /srv/pool/tmp              # 下载临时区（数据盘，公开根之外）
+log_dir: /srv/pool/var              # 同步操作日志目录（数据盘，公开根之外）
+records_file: /srv/pool/var/sync-records.jsonl
+
+max_file_size_mb: 20                # 单文件上限（任务书建议初始值）
+min_free_space_mb: 10240            # 数据盘安全余量 10G：低于此值拒绝同步
+allowed_formats: [png, jpeg, gif, webp]   # SVG 明确不支持
+
+upstream:
+  allowed_hosts:
+    - raw.githubusercontent.com
+    - objects.githubusercontent.com   # Raw 对大文件 302 跳转的签名 CDN 落点
+    - 127.0.0.1                       # 仅用于白名单内的回环测试资产（test-poc-001）
+  connect_timeout: 10
+  read_timeout: 60
+  allow_loopback_http: true           # 仅放行 127.0.0.1 的 http（回环测试资产用）；
+                                      # 白名单外的任何主机仍走 https 强校验

@@ -1,0 +1,22 @@
+# =====================================================================
+# Pool PoC V0.2 — 公网 HTTP :80 段（由 deploy.sh 渲染占位符）
+# 职责：ACME HTTP-01 验证 + 全站 301 到 HTTPS
+# =====================================================================
+
+server {
+    listen 80;
+    server_name __POOL_SERVER_NAME__;
+
+    server_tokens off;
+
+    # ACME HTTP-01 challenge（certbot webroot 模式）
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot-pool;
+        default_type "text/plain";
+    }
+
+    # 其余请求全部 301 到 HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
