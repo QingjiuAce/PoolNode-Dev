@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import stat
 import tempfile
 import time
 
@@ -18,6 +19,98 @@ from .validator import fsync_dir, resolve_safe
 
 class StorageError(Exception):
     """存储操作拒绝了目标路径或文件状态。"""
+
+
+class SystemDiskGuardError(StorageError):
+    """无法确认同步写入目标位于系统盘之外。"""
+
+
+def _system_root() -> pathlib.Path:
+    if os.name != "nt":
+        return pathlib.Path("/")
+    # Windows 上 '/' 是当前盘符，不一定是系统盘。不要信任环境变量。
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(32768)
+    size = ctypes.windll.kernel32.GetSystemWindowsDirectoryW(buffer, len(buffer))
+    if not 0 < size < len(buffer):
+        raise OSError("cannot determine Windows system drive")
+    windows_dir = pathlib.Path(buffer.value)
+    if not windows_dir.is_absolute() or len(windows_dir.drive) != 2:
+        raise OSError("invalid Windows system drive")
+    return pathlib.Path(windows_dir.anchor)
+
+
+def _existing_directory(path: pathlib.Path) -> pathlib.Path:
+    """解析链接，检查最近存在的目录；仅在路径确实不存在时向上探测。"""
+    probe = path.resolve()
+    while True:
+        try:
+            mode = probe.stat().st_mode
+        except FileNotFoundError:
+            if probe == probe.parent:
+                raise
+            probe = probe.parent
+            continue
+        if not stat.S_ISDIR(mode):
+            raise NotADirectoryError(str(probe))
+        return probe
+
+
+def _directory_device(path: pathlib.Path) -> int:
+    return _existing_directory(path).stat().st_dev
+
+
+def _check_write_devices(paths: dict[str, pathlib.Path]) -> None:
+    try:
+        system_device = _directory_device(_system_root())
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise SystemDiskGuardError("无法确认系统盘设备，拒绝同步（guard_system_disk）") from exc
+    for label, path in paths.items():
+        try:
+            device = _directory_device(path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise SystemDiskGuardError(
+                f"无法确认 {label} 所在设备，拒绝同步（guard_system_disk）"
+            ) from exc
+        if device == system_device:
+            raise SystemDiskGuardError(
+                f"{label} 与系统盘同设备：数据盘可能未挂载，"
+                "拒绝同步以防误写系统盘（guard_system_disk）"
+            )
+
+
+def _audit_dirs(cfg: PoolConfig) -> dict[str, pathlib.Path]:
+    return {
+        "log_dir": cfg.log_dir,
+        "records_file.parent": cfg.records_file.parent,
+        "records_file": _audit_destination_parent(cfg),
+    }
+
+
+def _audit_destination_parent(cfg: PoolConfig) -> pathlib.Path:
+    try:
+        return cfg.records_file.resolve().parent
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise SystemDiskGuardError("无法解析审计日志目标，拒绝同步（guard_system_disk）") from exc
+
+
+def check_system_disk(cfg: PoolConfig, target: pathlib.Path) -> None:
+    """在产生同步副作用前检查公开落点与暂存、审计位置。"""
+    if cfg.guard_system_disk:
+        try:
+            storage_root = cfg.storage_root.resolve()
+            tmp_dir = cfg.tmp_dir.resolve()
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise SystemDiskGuardError("无法解析公开或暂存目录，拒绝同步（guard_system_disk）") from exc
+        if tmp_dir == storage_root or storage_root in tmp_dir.parents:
+            raise SystemDiskGuardError("暂存目录解析后位于公开目录内，拒绝同步（guard_system_disk）")
+        _check_write_devices({
+            "storage_root": storage_root,
+            "target.parent": target.parent,
+            "tmp_dir": tmp_dir,
+            **_audit_dirs(cfg),
+        })
 
 
 def _replace_public_file(source: pathlib.Path, destination: pathlib.Path) -> None:
@@ -49,13 +142,19 @@ def publish(cfg: PoolConfig, tmp_path: pathlib.Path, relative_path: str) -> path
     - 同一文件系统直接 os.replace()；跨文件系统退化为“写 .staging + fsync + replace”；
     - 发布后设为 0444（只读），避免运行期意外改写。
     """
-    final = resolve_safe(cfg.storage_root, relative_path)
+    try:
+        final = resolve_safe(cfg.storage_root, relative_path)
+    except (OSError, RuntimeError, ValueError) as exc:
+        if not cfg.guard_system_disk:
+            raise
+        raise SystemDiskGuardError("无法解析发布目标，拒绝同步（guard_system_disk）") from exc
+    check_system_disk(cfg, final)
     final.parent.mkdir(parents=True, exist_ok=True)
 
     tmp_dev = os.stat(tmp_path).st_dev
-    root_dev = os.stat(cfg.storage_root).st_dev if cfg.storage_root.exists() else tmp_dev
+    final_dev = final.parent.stat().st_dev
 
-    if tmp_dev == root_dev:
+    if tmp_dev == final_dev:
         _replace_public_file(tmp_path, final)
     else:
         # 先在目标文件系统写完并同步，再替换公开文件名。
@@ -103,9 +202,24 @@ def remove_file(cfg: PoolConfig, relative_path: str) -> pathlib.Path:
 def record(cfg: PoolConfig, event: dict) -> None:
     """追加一条 JSONL 操作记录；调用方未提供时间戳时自动补全。"""
     ensure_dirs(cfg)
+    _append_record(cfg, event)
+
+
+def _append_record(cfg: PoolConfig, event: dict) -> None:
     event = {"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"), **event}
     with open(cfg.records_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def record_sync(cfg: PoolConfig, event: dict) -> None:
+    """在确认日志可安全写入后记录同步事件，不为拒绝创建暂存目录。"""
+    if not cfg.guard_system_disk:
+        record(cfg, event)
+        return
+    _check_write_devices(_audit_dirs(cfg))
+    cfg.log_dir.mkdir(parents=True, exist_ok=True)
+    cfg.records_file.parent.mkdir(parents=True, exist_ok=True)
+    _append_record(cfg, event)
 
 
 def read_records(cfg: PoolConfig) -> list[dict]:

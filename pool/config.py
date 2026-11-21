@@ -37,9 +37,9 @@ class PoolConfig:
     records_file: pathlib.Path
     max_file_size: int  # 单文件字节上限
     min_free_space: int  # 存储根所在盘的最小剩余空间（数据盘安全余量护栏）
-    guard_system_disk: bool  # true: storage_root 与系统盘同设备时拒绝同步（防数据盘掉挂载误写）
     allowed_formats: frozenset[str]
     upstream: UpstreamConfig
+    guard_system_disk: bool = True  # 防止挂载丢失后把 Pool 数据写入系统盘
 
 
 def _require(data: dict[str, Any], key: str) -> Any:
@@ -109,6 +109,10 @@ def load_config(path: str | pathlib.Path) -> PoolConfig:
         allow_loopback_http=bool(upstream_raw.get("allow_loopback_http", False)),
     )
 
+    guard_system_disk = raw.get("guard_system_disk", True)
+    if not isinstance(guard_system_disk, bool):
+        raise ConfigError("guard_system_disk 必须是 YAML 布尔值 true 或 false")
+
     return PoolConfig(
         storage_root=storage_root,
         tmp_dir=tmp_dir,
@@ -116,7 +120,7 @@ def load_config(path: str | pathlib.Path) -> PoolConfig:
         records_file=records_file,
         max_file_size=int(max_mb * 1024 * 1024),
         min_free_space=min_free_mb * 1024 * 1024,
-        guard_system_disk=bool(raw.get("guard_system_disk", False)),
+        guard_system_disk=guard_system_disk,
         allowed_formats=frozenset(formats),
         upstream=upstream,
     )

@@ -39,6 +39,7 @@ def write_config(root: pathlib.Path, **overrides) -> pathlib.Path:
         "log_dir": str(root / "logs"),
         "records_file": str(root / "logs" / "sync-records.jsonl"),
         "max_file_size_mb": 5,
+        "guard_system_disk": False,  # isolated single-volume test fixture
         "allowed_formats": ["png", "jpeg", "gif", "webp"],
         "upstream": {
             "allowed_hosts": ["127.0.0.1", "localhost"],

@@ -36,10 +36,13 @@ from .permissions import (
 )
 from .storage import (
     StorageError,
+    SystemDiskGuardError,
+    check_system_disk,
     last_record_for,
     new_tmp_file,
     publish,
     record,
+    record_sync,
     remove_file,
     stored_path,
 )
@@ -100,25 +103,22 @@ def cmd_check_upstream(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> i
 
 def _check_storage_capacity(cfg: PoolConfig) -> None:
     # 存储根可能尚未创建；从最近存在的祖先确认目标文件系统。
-    probe = cfg.storage_root
-    while not probe.exists():
-        probe = probe.parent
-    free = shutil.disk_usage(probe).free
+    try:
+        probe = cfg.storage_root
+        while not probe.exists() and probe != probe.parent:
+            probe = probe.parent
+        free = shutil.disk_usage(probe).free
+    except (OSError, RuntimeError, ValueError) as exc:
+        if not cfg.guard_system_disk:
+            raise
+        raise SystemDiskGuardError("无法确认存储盘余量，拒绝同步（guard_system_disk）") from exc
     if free < cfg.min_free_space:
-        raise StorageError(
+        error_type = SystemDiskGuardError if cfg.guard_system_disk else StorageError
+        raise error_type(
             f"存储根剩余空间 {free} 字节低于安全余量 {cfg.min_free_space}，"
             f"拒绝同步（数据盘保留安全余量）"
         )
     print(f"[3/8] 磁盘余量      : OK（剩余 {free // (1024 * 1024)} MB）")
-
-    if not cfg.guard_system_disk:
-        return
-    if os.stat(probe).st_dev == os.stat("/").st_dev:
-        raise StorageError(
-            "storage_root 与系统盘同设备：数据盘可能未挂载，"
-            "拒绝同步以防误写系统盘（guard_system_disk）"
-        )
-    print("[3/8] 数据盘挂载护栏: OK（独立设备）")
 
 
 def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
@@ -136,13 +136,21 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
         print(f"[2/8] 上游 URL 校验 : OK（{asset.source_url}）")
 
         # 6. 路径关 + 磁盘余量护栏
-        target = resolve_safe(cfg.storage_root, asset.relative_path)
+        try:
+            target = resolve_safe(cfg.storage_root, asset.relative_path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            if not cfg.guard_system_disk:
+                raise
+            raise SystemDiskGuardError("无法解析同步目标，拒绝同步（guard_system_disk）") from exc
+        check_system_disk(cfg, target)
         if target.exists():
             existing = sha256_file(target)
             print(f"[3/8] 路径校验      : OK（目标已存在，sha256={existing[:16]}…，将按版本策略覆盖）")
         else:
             print(f"[3/8] 路径校验      : OK（新文件）")
         _check_storage_capacity(cfg)
+        if cfg.guard_system_disk:
+            print("[3/8] 数据盘挂载护栏: OK（独立设备）")
 
         # 在公开目录外暂存，避免让不完整的下载被对外提供。
         tmp_path = new_tmp_file(cfg, asset.asset_id)
@@ -182,7 +190,7 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
         print(f"[8/8] 原子发布      : OK -> {final}")
 
         # 13. 同步记录
-        record(cfg, {
+        record_sync(cfg, {
             "action": "sync",
             "asset_id": asset.asset_id,
             "revision": asset.revision,
@@ -196,18 +204,25 @@ def cmd_sync(cfg: PoolConfig, assets: list[Asset], asset_id: str) -> int:
         })
         print(f"\nDONE sha256={local_sha}")
         return 0
+    except SystemDiskGuardError as e:
+        # The audit directory may be on the same unmounted volume as the data.
+        print(f"\nFAIL: {e}", file=sys.stderr)
+        return 1
     except (PermissionError, PathError, UpstreamError, FormatError, StorageError) as e:
         print(f"\nFAIL: {e}", file=sys.stderr)
         reason = getattr(e, "reason", None) or getattr(e, "kind", None) or "sync_failed"
-        record(cfg, {
-            "action": "sync",
-            "asset_id": asset_id,
-            "revision": asset.revision if asset else None,
-            "relative_path": asset.relative_path if asset else None,
-            "result": "rejected",
-            "reason": str(reason),
-            "detail": str(e),
-        })
+        try:
+            record_sync(cfg, {
+                "action": "sync",
+                "asset_id": asset_id,
+                "revision": asset.revision if asset else None,
+                "relative_path": asset.relative_path if asset else None,
+                "result": "rejected",
+                "reason": str(reason),
+                "detail": str(e),
+            })
+        except SystemDiskGuardError as audit_error:
+            print(f"审计未写入: {audit_error}", file=sys.stderr)
         return 1
     finally:
         if tmp_path is not None and tmp_path.exists():
