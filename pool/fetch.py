@@ -34,8 +34,9 @@ def main(argv: list[str] | None = None) -> int:
                         help='并发上限；1 强制使用单链接')
     parser.add_argument('--metrics', type=pathlib.Path,
                         help='把逐请求阶段计时（DNS/TCP/TLS/TTFB/Body）写入该 JSONL 文件')
-    parser.add_argument('--scheduler', choices=('static', 'dynamic'), default='static',
-                        help='static=v0.4 固定等分（默认/回退）；dynamic=v0.5 任务队列+连接复用')
+    parser.add_argument('--scheduler', choices=('static', 'dynamic', 'auto'), default='auto',
+                        help='auto（默认）=≥4MiB 用 dynamic 任务队列、小文件保持 static 固定等分；'
+                             'static=v0.4 行为；dynamic=强制任务队列')
     args = parser.parse_args(argv)
     metrics = Metrics() if args.metrics is not None else None
     try:
@@ -47,15 +48,20 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError('需要 1 B 至 20 MiB 的准确字节数（size_bytes 或 --size）')
         workers = args.workers if args.workers is not None else (
             1 if size < 512 * 1024 else 4 if size < 2 * 1024**2 else 16)
+        scheduler = args.scheduler
+        if scheduler == 'auto':
+            # measured crossover (2026-11-23 paired runs): the chunk queue wins
+            # on large files at high worker counts, static wins on small files
+            scheduler = 'dynamic' if size >= 4 * 1024 * 1024 else 'static'
         t0 = time.perf_counter()
         mode = download(url, size, digest, args.output, workers, metrics,
-                        args.scheduler)
+                        scheduler)
         wall = time.perf_counter() - t0
         print(f'已校验 SHA256：{digest}；模式：{mode}；输出：{args.output}')
         if metrics is not None:
             metrics.add({'kind': 'download', 'ts': round(time.time(), 3),
                          'wall_ms': round(wall * 1000, 2), 'mode': mode,
-                         'scheduler': args.scheduler, 'size': size,
+                         'scheduler': scheduler, 'size': size,
                          'workers': workers, 'error': None})
             metrics.dump(args.metrics)
         return 0

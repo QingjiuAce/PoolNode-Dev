@@ -12,10 +12,12 @@ python -m pool.fetch pool-public-smoke-test ./smoke.jpg --assets config/assets.e
 
 首版策略按准确文件长度选择：小于 512 KiB 用 1 条；512 KiB 至不足 2 MiB 用 4 条；2–20 MiB 用 16 条。阈值是产品选择，不是测出的最优点。`--workers 1` 强制退回完整单链接，`--workers 8` 限制本次并发；不要叠加多个实例跑批。使用 `--help` 不访问网络。旧白名单无 `size_bytes` 时，可用 `--size` 指定已知准确字节数；绝不从下载响应补填期望哈希。
 
+调度器（v0.5）：`--scheduler auto`（默认）对 ≥4 MiB 文件启用动态任务队列（worker 从共享队列领取 ~256 KiB 块、复用 keep-alive 连接；同窗配对实测 w16 中位 +22%、最差 case +77%），小文件保持 v0.4 固定等分（同窗配对实测小文件队列模式落后 ~22%，因块数缩减减少了并发流；绝对差 ~250 ms）。`--scheduler static` 强制 v0.4 行为作为回退；`--scheduler dynamic` 强制队列模式。两者共用同一探测、Content-Range、强 ETag/If-Range 校验与单流回退语义，完整性不受调度选择影响。`--metrics PATH` 导出逐请求 DNS/TCP/TLS/TTFB/Body 计时（不改变行为）。设计与数据见 [V05_DYNAMIC_SCHEDULER](V05_DYNAMIC_SCHEDULER.md)。
+
 ## 成功与失败
 
 - 客户端按 ID 检查原有批准状态、证据、规范相对路径及登记的 SHA256；固定请求 Pool HTTPS 域名，不读取清单中的上游 URL，不自动发布或同步资产。
-- 多连接先探测一个字节及强 ETag，再等分为不重叠区间；每段独立 HTTP/1.1 TLS 连接，携带 If-Range，校验 206、Content-Range、总长、ETag 和实际长度。暂未实现动态领取小块或跨进程断点恢复。
+- 多连接先探测一个字节及强 ETag，再划分互不重叠区间；dynamic 模式下各区间进入共享队列由 worker 领取（static 模式保持固定等分、每段独立连接）。每段独立 HTTP/1.1 TLS 连接语义（dynamic 中同一 worker 的后续块复用其连接），携带 If-Range，校验 206、Content-Range、总长、ETag 和实际长度。暂未实现跨进程断点恢复。
 - 网络异常同段最多重试一次；分段不可用、响应不一致或拼接哈希失败时，清空临时内容，用单链接重新下载和校验。证书失败、不允许的跳转、明确拒绝/撤下、429/503 或本地 I/O 错误不靠降级绕过。已开始的并发请求可能仍会收尾。
 - 只有全件大小、SHA 均匹配才创建最终文件。请用自己控制且支持硬链接的本地目录（如 NTFS/ext4）；不会覆盖同名文件。正常异常处理会清理临时文件，断电或强制杀进程可能留下 `.pool-*.part`；不要把它当作成品。成功时 `range`/`single` 表示实际交付模式，不表示速度。
 
