@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import http.client
+import json
 import pathlib
 import sys
+import time
 
 from . import permissions, validator
-from .range_transport import download
+from .range_transport import Metrics, download
 
 ORIGIN = 'https://dl.bszx.site'
 MAX_BYTES = 20 * 1024 * 1024  # v1 product limit, independent of server config
@@ -30,7 +32,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--size', type=int, help='旧清单缺少 size_bytes 时提供准确字节数')
     parser.add_argument('--workers', type=int, choices=range(1, 17), metavar='1..16',
                         help='并发上限；1 强制使用单链接')
+    parser.add_argument('--metrics', type=pathlib.Path,
+                        help='把逐请求阶段计时（DNS/TCP/TLS/TTFB/Body）写入该 JSONL 文件')
+    parser.add_argument('--scheduler', choices=('static', 'dynamic'), default='static',
+                        help='static=v0.4 固定等分（默认/回退）；dynamic=v0.5 任务队列+连接复用')
     args = parser.parse_args(argv)
+    metrics = Metrics() if args.metrics is not None else None
     try:
         url, digest, registered = select(args.assets, args.asset_id)
         if registered is not None and args.size is not None and registered != args.size:
@@ -40,13 +47,30 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError('需要 1 B 至 20 MiB 的准确字节数（size_bytes 或 --size）')
         workers = args.workers if args.workers is not None else (
             1 if size < 512 * 1024 else 4 if size < 2 * 1024**2 else 16)
-        mode = download(url, size, digest, args.output, workers)
-    except (permissions.AssetConfigError, permissions.PermissionError, validator.PathError,
-            ValueError, OSError, RuntimeError, http.client.HTTPException) as exc:
-        print(f'下载失败：{exc}', file=sys.stderr)
-        return 1
-    print(f'已校验 SHA256：{digest}；模式：{mode}；输出：{args.output}')
-    return 0
+        t0 = time.perf_counter()
+        mode = download(url, size, digest, args.output, workers, metrics,
+                        args.scheduler)
+        wall = time.perf_counter() - t0
+        print(f'已校验 SHA256：{digest}；模式：{mode}；输出：{args.output}')
+        if metrics is not None:
+            metrics.add({'kind': 'download', 'ts': round(time.time(), 3),
+                         'wall_ms': round(wall * 1000, 2), 'mode': mode,
+                         'scheduler': args.scheduler, 'size': size,
+                         'workers': workers, 'error': None})
+            metrics.dump(args.metrics)
+        return 0
+    except BaseException as exc:
+        if metrics is not None:
+            metrics.add({'kind': 'download', 'ts': round(time.time(), 3),
+                         'wall_ms': None, 'mode': None, 'size': None,
+                         'workers': None, 'error': exc.__class__.__name__})
+            metrics.dump(args.metrics)
+        if isinstance(exc, (permissions.AssetConfigError, permissions.PermissionError,
+                            validator.PathError, ValueError, OSError, RuntimeError,
+                            http.client.HTTPException)):
+            print(f'下载失败：{exc}', file=sys.stderr)
+            return 1
+        raise
 
 
 if __name__ == '__main__':
