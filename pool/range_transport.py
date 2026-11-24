@@ -39,6 +39,10 @@ class _NetworkError(OSError):
     """A transport failure; distinct from errors writing local storage."""
 
 
+class Cancelled(RuntimeError):
+    """External cancellation requested: staging is discarded, no fallback."""
+
+
 class Metrics:
     """Thread-safe collector of per-request diagnostics. Opt-in only: callers
     that never construct one execute the exact v0.4 code path. Records carry
@@ -293,14 +297,16 @@ def _open_conn(ctx, metrics=None):
     return http.client.HTTPSConnection(_HOST, 443, timeout=_TIMEOUT, context=ctx)
 
 
-def _dynamic(ctx, target, size, workers, stage, metrics=None):
+def _dynamic(ctx, target, size, workers, stage, metrics=None, cancel=None):
     """Chunk-queue scheduler (v0.5): workers claim chunks from a shared queue
     and own one keep-alive connection reused across their chunks.
 
     Same protocol and validation primitives as the static path (probe, per
     request Content-Range/ETag/If-Range checks, one _NetworkError retry per
     chunk on a fresh connection); any failure beyond that aborts into the
-    download-level single fallback. A single-chunk plan must not come here.
+    download-level single fallback. An externally set cancel Event aborts the
+    arm with Cancelled and no fallback (best-effort: in-flight chunks finish).
+    A single-chunk plan must not come here.
     """
     spans = _chunk_spans(size, workers)
     if len(spans) < 2:
@@ -312,19 +318,22 @@ def _dynamic(ctx, target, size, workers, stage, metrics=None):
               for i, span in enumerate(spans)]
     for chunk in chunks:
         pending.put(chunk)
-    cancel = threading.Event()
+    stop = threading.Event()
     lock = threading.Lock()
 
     def worker(wid):
         conn = None
         sink = stage.open('r+b', buffering=0)
         try:
-            while not cancel.is_set():
+            while not stop.is_set():
+                if cancel is not None and cancel.is_set():
+                    stop.set()
+                    raise Cancelled('download cancelled')
                 try:
                     chunk = pending.get_nowait()
                 except queue.Empty:
                     return
-                if cancel.is_set():
+                if stop.is_set():
                     with lock:
                         chunk['state'] = 'CANCELLED'
                     continue
@@ -336,7 +345,12 @@ def _dynamic(ctx, target, size, workers, stage, metrics=None):
                     attempt = 1
                     while True:
                         if conn is None:
-                            conn = _open_conn(ctx, metrics)
+                            try:
+                                conn = _open_conn(ctx, metrics)
+                            except (OSError, http.client.HTTPException) as exc:
+                                # Connection setup is transport: retry once, then
+                                # fall back rather than fail the whole download.
+                                raise _NetworkError('connection setup failed') from exc
                         try:
                             _fetch(ctx, target, size, chunk['span'], tag, sink,
                                    metrics=metrics,
@@ -344,15 +358,19 @@ def _dynamic(ctx, target, size, workers, stage, metrics=None):
                                    conn=conn)
                             break
                         except _NetworkError:
-                            with lock:
-                                chunk['retries'] += 1
                             conn.close()
                             conn = None  # retry once from a fresh connection
                             if attempt >= 2:
                                 raise
+                            with lock:
+                                chunk['retries'] += 1  # count scheduled retries only
                             attempt = 2
+                except Cancelled:
+                    with lock:
+                        chunk['state'] = 'CANCELLED'
+                    raise
                 except BaseException:
-                    cancel.set()
+                    stop.set()
                     with lock:
                         chunk['state'] = 'FAILED'
                     raise
@@ -371,7 +389,7 @@ def _dynamic(ctx, target, size, workers, stage, metrics=None):
         with ThreadPoolExecutor(max_workers=n_workers) as pool:
             list(pool.map(worker, range(n_workers)))
     finally:
-        cancel.set()  # success: no-op; failure: stop draining work we discard
+        stop.set()  # success: no-op; failure/cancel: stop draining work we discard
         if metrics is not None:
             metrics.add({'kind': 'chunks', 'ts': round(time.time(), 3),
                          'scheduler': 'dynamic', 'workers': n_workers,
@@ -379,13 +397,15 @@ def _dynamic(ctx, target, size, workers, stage, metrics=None):
 
 
 def download(url: str, size: int, sha256: str, output: Path, workers: int,
-             metrics=None, scheduler: str = 'static') -> str:
+             metrics=None, scheduler: str = 'static', cancel=None) -> str:
     """Deliver a new file, returning 'range' or 'single' only after verification.
 
     workers is 1..16; one worker or fewer than two bytes uses a single GET.
     scheduler selects 'static' (v0.4 fixed equal-split, the default and
     fallback) or 'dynamic' (v0.5 chunk queue with connection reuse); both
     share the same probe, validation, fallback, and publication semantics.
+    cancel (optional threading.Event) aborts the dynamic arm with Cancelled
+    and no fallback; the static arm does not observe it.
     metrics (optional) records per-request phase timings without changing
     transport or validation behaviour in any way.
     Range protocol/transport/integrity failures discard all staged bytes and
@@ -415,7 +435,7 @@ def download(url: str, size: int, sha256: str, output: Path, workers: int,
         if workers > 1 and size >= 2:
             try:
                 if scheduler == 'dynamic':
-                    _dynamic(ctx, target, size, workers, stage, metrics)
+                    _dynamic(ctx, target, size, workers, stage, metrics, cancel)
                 else:
                     _ranges(ctx, target, size, workers, stage, metrics)
                 _verify(stage, size, sha256.lower())

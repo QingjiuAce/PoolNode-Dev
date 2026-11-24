@@ -2,7 +2,11 @@
 from email.message import Message
 from hashlib import sha256
 from io import BytesIO
+import pathlib
 from pathlib import Path
+import threading
+import time
+
 import pytest
 
 from pool import fetch, range_transport as rt
@@ -319,4 +323,109 @@ def test_dynamic_publish_failure_is_terminal(monkeypatch, tmp_path):
     with pytest.raises(OSError, match='publication failed'):
         rt.download(URL, len(DATA), DIGEST, out, 8, None, 'dynamic')
     assert not out.exists()
+    assert not list(tmp_path.glob('*.part'))
+
+
+# --- v0.5 merge-gate tests T1-T5 (docs/V05_AUDIT.md) -----------------------
+
+def test_t1_local_sink_open_failure_is_terminal(monkeypatch, tmp_path):
+    """T1: worker cannot open its staging handle -> terminal, no fallback."""
+    dynamic_setup(monkeypatch)
+    real_open = pathlib.Path.open
+
+    def fake_open(self, mode='r', *args, **kwargs):
+        if mode == 'r+b':
+            raise OSError('simulated sink open failure')
+        return real_open(self, mode, *args, **kwargs)
+    monkeypatch.setattr(pathlib.Path, 'open', fake_open)
+    out = tmp_path / 'out.jpg'
+    with pytest.raises(OSError, match='sink open'):
+        rt.download(URL, len(DATA), DIGEST, out, 8, None, 'dynamic')
+    assert not out.exists()
+    assert not list(tmp_path.glob('*.part'))
+
+
+def test_t2_short_local_write_is_terminal(monkeypatch):
+    """T2: disk-full style short write -> OSError('short local write')."""
+    dynamic_setup(monkeypatch)
+
+    class ShortSink:
+        def seek(self, *args, **kwargs):
+            pass
+
+        def write(self, block):
+            return 0
+
+    ctx = rt.ssl.create_default_context()
+    with pytest.raises(OSError, match='short local write'):
+        rt._fetch(ctx, '/fixture.jpg', len(DATA), None, None, ShortSink())
+
+
+def test_t3_external_cancel_aborts_without_publish(monkeypatch, tmp_path):
+    """T3: external cancel set mid-download -> Cancelled, no publish, no
+    IN_PROGRESS leftovers (in-flight chunks may finish, queue stays queued)."""
+    dynamic_setup(monkeypatch)
+    cancel = threading.Event()
+    seen = {'chunks': 0}
+    real_fetch = rt._fetch
+
+    def counting_fetch(*args, **kwargs):
+        if kwargs.get('label', '').startswith('w'):
+            seen['chunks'] += 1
+            if seen['chunks'] >= 2:
+                cancel.set()
+        return real_fetch(*args, **kwargs)
+
+    monkeypatch.setattr(rt, '_fetch', counting_fetch)
+    out = tmp_path / 'out.jpg'
+    metrics = rt.Metrics()
+    with pytest.raises(rt.Cancelled):
+        rt.download(URL, len(DATA), DIGEST, out, 8, metrics, 'dynamic', cancel)
+    assert not out.exists()
+    assert not list(tmp_path.glob('*.part'))
+    chunk_rec = [r for r in metrics.records if r['kind'] == 'chunks'][0]
+    states = [c['state'] for c in chunk_rec['chunks']]
+    assert 'IN_PROGRESS' not in states
+    assert 'SUCCEEDED' in states and 'QUEUED' in states
+
+
+def test_t4_retry_exhausted_chunk_fails_then_single_fallback(monkeypatch, tmp_path):
+    """T4: one chunk fails twice -> FAILED + others SUCCEEDED; the parallel
+    assembly is discarded and only the verified single-GET fallback publishes."""
+    spans = dynamic_setup(monkeypatch)
+    victim = span_header(spans[0])
+    def slow_reset(headers):
+        if headers.get('Range') == victim:
+            time.sleep(0.02)  # let other workers complete a chunk first
+            return ConnectionResetError('reset')
+        return None
+    ChunkyConn.fail = slow_reset
+    out = tmp_path / 'out.jpg'
+    metrics = rt.Metrics()
+    assert rt.download(URL, len(DATA), DIGEST, out, 8, metrics, 'dynamic') == 'single'
+    assert out.read_bytes() == DATA
+    chunk_rec = [r for r in metrics.records if r['kind'] == 'chunks'][0]
+    states = [c['state'] for c in chunk_rec['chunks']]
+    assert states.count('FAILED') == 1
+    assert 'SUCCEEDED' in states
+    assert 'IN_PROGRESS' not in states
+    failed = [c for c in chunk_rec['chunks'] if c['state'] == 'FAILED'][0]
+    assert failed['retries'] == 1
+
+
+def test_t5_connection_setup_failure_falls_back(monkeypatch, tmp_path):
+    """T5: scheduler cannot create a connection -> treated as transport,
+    one retry, then single fallback; no temporary residue."""
+    dynamic_setup(monkeypatch)
+
+    def broken_open(*args, **kwargs):
+        raise OSError('connection setup failed')
+
+    monkeypatch.setattr(rt, '_open_conn', broken_open)
+    out = tmp_path / 'out.jpg'
+    metrics = rt.Metrics()
+    assert rt.download(URL, len(DATA), DIGEST, out, 8, metrics, 'dynamic') == 'single'
+    assert out.read_bytes() == DATA
+    chunk_rec = [r for r in metrics.records if r['kind'] == 'chunks'][0]
+    assert 'FAILED' in [c['state'] for c in chunk_rec['chunks']]
     assert not list(tmp_path.glob('*.part'))
