@@ -243,6 +243,18 @@ def parse_window(spec):
     return datetime.fromisoformat(first), datetime.fromisoformat(last)
 
 
+def parse_slots(spec: str) -> frozenset:
+    """采样小时白名单；空串返回默认 SLOT_HOURS（每 2h + 20-23 每小时）。"""
+    spec = (spec or '').strip()
+    if not spec:
+        return SLOT_HOURS
+    hours = {int(x) for x in spec.split(',') if x.strip()}
+    bad = sorted(h for h in hours if not 0 <= h <= 23)
+    if bad:
+        raise ValueError(f'invalid hour(s): {bad}')
+    return frozenset(hours)
+
+
 def _last_record(path, tag):
     try:
         with open(path, 'r', encoding='utf-8') as f:
@@ -280,6 +292,8 @@ def main(argv=None):
     ap.add_argument('--out', default='probe-results.jsonl')
     ap.add_argument('--timeout', type=float, default=240.0, help='单请求 socket 超时（秒）')
     ap.add_argument('--window', default=DEFAULT_WINDOW)
+    ap.add_argument('--slots', default='',
+                    help='采样小时白名单（逗号分隔）；缺省 = 每 2h + 20-23 每小时')
     ap.add_argument('--enforce-window', action='store_true', help='窗口外静默跳过')
     ap.add_argument('--slot-guard', action='store_true', help='非采样时段静默跳过')
     ap.add_argument('--no-dedupe', action='store_true', help='允许同一小时重复记录')
@@ -292,7 +306,7 @@ def main(argv=None):
         if args.enforce_window and not (start <= now.replace(tzinfo=None) <= end):
             print(f'skip: outside window {args.window}')
             return 0
-        if args.slot_guard and now.hour not in SLOT_HOURS:
+        if args.slot_guard and now.hour not in parse_slots(args.slots):
             print(f'skip: hour {now.hour} is not a sample slot')
             return 0
         if not args.no_dedupe:

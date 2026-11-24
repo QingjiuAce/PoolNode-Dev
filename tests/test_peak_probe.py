@@ -110,3 +110,12 @@ def test_window_and_slot_guards():
     assert start < end
     assert {20, 21, 22, 23} <= set(pp.SLOT_HOURS)
     assert 1 not in pp.SLOT_HOURS and 19 not in pp.SLOT_HOURS
+
+
+def test_parse_slots():
+    assert pp.parse_slots('') == pp.SLOT_HOURS
+    assert pp.parse_slots(' 12,16,20,21,22,23 ') == frozenset({12, 16, 20, 21, 22, 23})
+    with pytest.raises(ValueError, match='invalid hour'):
+        pp.parse_slots('24')
+    with pytest.raises(ValueError, match='invalid hour'):
+        pp.parse_slots('12,-1')
