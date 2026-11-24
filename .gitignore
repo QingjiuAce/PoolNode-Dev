@@ -12,3 +12,7 @@ tmp/
 # 生产配置（只提交 example）
 config/config.yaml
 config/assets.yaml
+
+# 测量运行日志（原始数据 jsonl 仍然提交）
+reports/benchmarks/**/*.log
+reports/benchmarks/**/*.lock
