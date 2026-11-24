@@ -429,3 +429,20 @@ def test_t5_connection_setup_failure_falls_back(monkeypatch, tmp_path):
     chunk_rec = [r for r in metrics.records if r['kind'] == 'chunks'][0]
     assert 'FAILED' in [c['state'] for c in chunk_rec['chunks']]
     assert not list(tmp_path.glob('*.part'))
+
+
+@pytest.mark.parametrize('size,expected', [(1_700_000, 'static'), (5_000_000, 'dynamic')])
+def test_auto_scheduler_resolution(monkeypatch, tmp_path, size, expected):
+    """--scheduler auto (default): >=4MiB -> dynamic, small files -> static.
+    The 4MiB crossover is the key user-visible default of v0.5."""
+    captured = {}
+    monkeypatch.setattr(fetch, 'select',
+                        lambda *a: ('https://dl.bszx.site/x.jpg', 'a' * 64, size))
+
+    def fake_download(url, sz, sha, output, workers, metrics, scheduler):
+        captured.update(scheduler=scheduler, size=sz)
+        return 'range'
+    monkeypatch.setattr(fetch, 'download', fake_download)
+    rc = fetch.main(['x', str(tmp_path / 'out.jpg'), '--assets', 'any.yaml'])
+    assert rc == 0
+    assert captured == {'scheduler': expected, 'size': size}

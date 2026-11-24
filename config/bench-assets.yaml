@@ -1,0 +1,99 @@
+# =====================================================================
+# Pool PoC V0.1 资产白名单示例
+# ---------------------------------------------------------------------
+# 授权规则（缺一不可，无默认批准）：
+#   * permission_status: pending | approved | denied
+#   * 只有 approved 且 permission_evidence 非空才允许 sync；
+#   * expected_sha256 为官方登记值（站长从 GitHub 仓库文件核对后填写）；
+#     为 null 时仅做本地哈希记录，不视为完成官方一致性验证。
+#   * relative_path 即图片在 lmy414/ai-girl-stickers 仓库中的相对路径，
+#     同时也是 Pool 对外 URL（https://<POOL_DOMAIN>/<relative_path>）。
+# =====================================================================
+
+assets:
+
+  # ---------------------------------------------------------------
+  # 【测试用】本地回环测试资产：仅用于开发与服务器本机端到端验证。
+  # 文件由 Python 标准库生成（tests/helpers.py 的 make_png），无版权问题。
+  # 使用时需 config 中开启 allow_loopback_http: true 并把 127.0.0.1 加入
+  # upstream.allowed_hosts。生产部署时本条可保留（无公网暴露面）或删除。
+  # ---------------------------------------------------------------
+  - asset_id: test-poc-001
+    source_url: http://127.0.0.1:8000/pool-tests/test-poc-001.png
+    relative_path: pool-tests/test-poc-001.png
+    permission_status: approved
+    permission_evidence: "测试资产：本项目自生成图片（无第三方著作权），站长批准用于 PoC 验证"
+    attribution: "Pool PoC 测试素材"
+    license: "测试用途，随 Pool 代码以 MIT 提供"
+    expected_sha256: null     # 测试资产无官方哈希，按本地校验记录
+    revision: 1
+
+  # ---------------------------------------------------------------
+  # 【测试用】公网冒烟测试图片（V0.2）：自生成 JPEG，无第三方版权内容。
+  # expected_sha256 = 生成器输出登记值（官方基准，由 scripts/gen-test-jpeg.py 生成）。
+  # ---------------------------------------------------------------
+  - asset_id: pool-public-smoke-test
+    source_url: http://127.0.0.1:8000/submissions/originals/pool-public-smoke-test.jpg
+    relative_path: submissions/originals/pool-public-smoke-test.jpg
+    permission_status: approved
+    permission_evidence: >-
+      Self-generated test fixture. Created for Pool PoC public deployment.
+      No third-party image content.
+    attribution: "Pool PoC 测试素材"
+    license: "测试用途，随 Pool 代码以 MIT 提供"
+    size_bytes: 1778514
+    expected_sha256: b60435075bfccd82ecb6fc20706276b0df2559c8f816bc933dbfc6ac7eaa932e
+    revision: 1
+
+  # ---------------------------------------------------------------
+  # 【示例：待授权的真实作品】保持 pending —— sync 会被拒绝。
+  # 待站长明确批准后：把 status 改为 approved、补 permission_evidence、
+  # 填 expected_sha256（从 GitHub 仓库文件核对）。
+  # ---------------------------------------------------------------
+  - asset_id: example-real-pending
+    source_url: https://raw.githubusercontent.com/lmy414/ai-girl-stickers/main/owner-picks/blue-maid.png
+    relative_path: owner-picks/blue-maid.png
+    permission_status: pending
+    permission_evidence: ""
+    attribution: "蓝色大肥鱼 站长自用板块"
+    license: "图片权利归原作者；仓库 MIT 许可仅覆盖文字材料，不含图片"
+    expected_sha256: null
+    revision: 1
+
+  # ---------------------------------------------------------------
+  # 【示例：明确拒绝】denied 资产永远无法 sync。
+  # ---------------------------------------------------------------
+  - asset_id: example-denied
+    source_url: https://raw.githubusercontent.com/lmy414/ai-girl-stickers/main/blue-fish-originals/026e44f4-845f-4e51-bcec-812497aadcff.png
+    relative_path: blue-fish-originals/026e44f4-845f-4e51-bcec-812497aadcff.png
+    permission_status: denied
+    permission_evidence: "示例条目：演示 denied 行为"
+    attribution: "-"
+    license: "-"
+    expected_sha256: null
+    revision: 1
+
+  - asset_id: bench-2m
+    source_url: http://127.0.0.1:8000/pool-tests/bench-2m.jpg
+    relative_path: pool-tests/bench-2m.jpg
+    permission_status: approved
+    permission_evidence: >-
+      Self-generated benchmark fixture for evening-peak client throughput
+      measurement. No third-party image content.
+    attribution: "Pool PoC 测试素材"
+    license: "测试用途，随 Pool 代码以 MIT 提供"
+    size_bytes: 2112525
+    expected_sha256: cb7926ffb9bb13c6a48efffd22412353ea6450d322feb6be1147ee6f204b6530
+    revision: 2
+  - asset_id: bench-6m
+    source_url: http://127.0.0.1:8000/pool-tests/bench-6m.jpg
+    relative_path: pool-tests/bench-6m.jpg
+    permission_status: approved
+    permission_evidence: >-
+      Self-generated benchmark fixture for evening-peak client throughput
+      measurement. No third-party image content.
+    attribution: "Pool PoC 测试素材"
+    license: "测试用途，随 Pool 代码以 MIT 提供"
+    size_bytes: 5403720
+    expected_sha256: 294d65cc0751226ef6691e5645f5625f09d8c24b6389e3f451d467b38f6359ed
+    revision: 2

@@ -71,7 +71,7 @@ def run_client(seq, asset, workers, out, assets, scheduler=None):
     for line in (p.stdout or '').splitlines():
         if '模式：' in line:
             mode = line.split('模式：')[1].split('；')[0].strip()
-    return {'arm': ('D' if scheduler == 'dynamic' else 'B'), 'wall_ms': round(wall * 1000, 2),
+    return {'arm': ('D' if scheduler is not None else 'B'), 'wall_ms': round(wall * 1000, 2),
             'sha_ok': sha_ok, 'mode': mode, 'rc': p.returncode,
             'err': (p.stderr or '')[-160:] if p.returncode else ''}
 
