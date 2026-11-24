@@ -1,12 +1,15 @@
-# Pool PoC V0.1 — 独立备用原图下载节点
+# PoolNode — 蓝色大肥鱼.com 独立备用原图下载节点
 
-面向 [蓝色大肥鱼.com](https://蓝色大肥鱼.com) 的独立、只读、可撤销的备用原图下载服务。
-与现有 GitHub Raw 发布体系完全解耦：不替换 Raw、不改原站代码、不改已发布 URL。
+> 原名 *Pool PoC*。面向 [蓝色大肥鱼.com](https://蓝色大肥鱼.com) 的**独立、只读、可撤销**的
+> 备用原图下载服务。与现有 GitHub Raw 发布体系完全解耦：不替换 Raw、不改原站代码、
+> 不改已发布 URL。
 
 **许可说明**：本仓库的 MIT 许可仅覆盖 Pool 自身代码与文档。
 任何图片文件的授权以 `/etc/pool-poc/assets.yaml` 中各资产的
 `attribution / license / permission_evidence` 字段为准 —— 图片著作权始终归原作者，
 未经站长明确批准（approved + 留证）的资产不会被同步或发布。
+
+---
 
 ## 架构一览
 
@@ -16,15 +19,27 @@ pool-poc CLI（授权→下载→SHA256→原子发布）
 /srv/pool/data/<repo相对路径>    ← 50G 数据盘，Nginx 只读静态服务
         ↓
 https://<POOL_DOMAIN>/<repo相对路径>
+
+pool.fetch（客户端，V0.4 新增）    ← 晚高峰分段并发下载器（见下）
 ```
 
-详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；从源码接手请看
+[源码导览](docs/CODE_ARCHITECTURE_MAP.md) 和 [维护风格](docs/CODE_STYLE_GUIDE.md)。
+
+## 版本史
+
+| 版本 | 内容 | 证据 |
+|---|---|---|
+| V0.1 | 内部 PoC：核心 CLI（授权/下载/校验/原子发布）+ 回环静态服务 | docs/TEST_REPORT.md |
+| V0.2 | 公网 HTTPS 上线 **https://dl.bszx.site**（临时测试域名）：DNS/证书/301/自动续期；公网验收 33/33 | docs/TLS_DEPLOYMENT.md · docs/V02_TEST_REPORT.md |
+| V0.2.x | 晚高峰回程实测：PCCW per-flow 整形（单流 0.5 Mbps，16 流并发 6.35 Mbps）→ 根因/解法矩阵/路线图 | docs/IMAGE_DOWNLOAD_REPORT.md |
+| V0.4-beta | **峰值客户端 `pool.fetch`**（16 段 Range + If-Range/ETag/206 校验 + 单链路降级）+ 40 张 Demo 图池 + 晚高峰基准（22:48–23:25，7 工况 × 5 rep） | docs/PEAK_DOWNLOAD_CLIENT.md · reports/benchmarks/v04-beta-peak/ · reports/demo/ |
 
 ## 快速开始（本地开发）
 
 ```bash
 pip install -r requirements.txt pytest
-python -m pytest tests/          # 76 项自动化测试
+python -m pytest tests/          # 自动化测试（62+ 用例，含参数化）
 ```
 
 ## 快速开始（服务器部署）
@@ -44,12 +59,22 @@ bash scripts/smoke-test.sh
 
 ## CLI
 
+### 服务端
+
 | 命令 | 作用 |
 | --- | --- |
 | `pool-poc check-upstream <asset_id>` | 上游连通性诊断（DNS/TCP/TLS/HTTP 分阶段，不落盘）|
 | `pool-poc sync <asset_id>` | 授权检查→流式下载→格式/大小/SHA256 校验→原子发布 |
 | `pool-poc verify <asset_id>` | 校验已发布文件与官方哈希/同步记录的一致性 |
 | `pool-poc remove <asset_id>` | 删除白名单资产对应的物理文件（留痕）|
+
+### 客户端（V0.4 新增）
+
+| 命令 | 作用 |
+| --- | --- |
+| `python -m pool.fetch <asset_id> <out> --assets <白名单.yaml>` | 晚高峰分段并发下载：按文件大小选 1/4/16 段，Range+If-Range+ETag+206 逐段校验，SHA256 全件比对，失败自动降级单链路 |
+
+细则与边界：[docs/PEAK_DOWNLOAD_CLIENT.md](docs/PEAK_DOWNLOAD_CLIENT.md)
 
 ## URL 结构
 
@@ -69,20 +94,32 @@ https://<POOL_DOMAIN>/owner-picks/blue-maid.png
 
 ```
 config/    配置示例（config / assets 白名单）
-pool/      Python 源码（config permissions validator downloader storage cli）
-scripts/   install / deploy / smoke-test / traffic-stats / remove-asset
-           / logrotate / china-speedtest（大陆测速脚本）
+pool/      Python 源码
+           ├─ config / permissions / validator / downloader / storage / cli   （服务端）
+           └─ fetch / range_transport                                          （客户端，V0.4）
+scripts/   install / deploy / smoke-test / public-acceptance / traffic-stats
+           / remove-asset / logrotate / china-speedtest（Windows + Linux/macOS）
+           / gen-test-image / gen-test-jpeg
 tests/     pytest 自动化测试
-docs/      ARCHITECTURE / DEPLOYMENT / SECURITY / CHINA-TEST / TEST_REPORT
+reports/   benchmarks（晚高峰基准）/ demo（40 图清单）/ network-tests（三网样本）
+docs/      ARCHITECTURE / DEPLOYMENT / SECURITY / TLS_DEPLOYMENT / CHINA-TEST
+           / PEAK_DOWNLOAD_CLIENT / IMAGE_DOWNLOAD_REPORT / OPTIMIZATION_ROADMAP
+           / V02_TEST_REPORT / TEST_REPORT 等
 ```
 
 ## 状态
 
-- [x] V0.1 内部 PoC：核心实现 + 78 项测试 + 回环静态服务（docs/TEST_REPORT.md）
-- [x] V0.2 公网 PoC：**https://dl.bszx.site** HTTPS 上线（临时测试域名）
-  - DNS/证书/301 跳转/自动续期全部验证（docs/TLS_DEPLOYMENT.md）
-  - 公网验收 33/33：GET/HEAD/Range/SHA256 三方闭环/安全边界（docs/V02_TEST_REPORT.md）
-  - 大陆测速工具就绪：`scripts/china-speedtest.ps1`（Windows）/ `.sh`（Linux/macOS）
-  - 未测项：联通/电信/广电样本、晚高峰（20:00–23:00）样本 → **NOT TESTED**
+- [x] V0.1 内部 PoC：核心实现 + 回环静态服务
+- [x] V0.2 公网 HTTPS：**https://dl.bszx.site**（临时测试域名，切换成本已最小化）
+  - 公网验收 33/33：GET/HEAD/Range/SHA256 三方闭环/安全边界
+- [x] 晚高峰根因实测：回程 PCCW per-flow 整形（单流 0.5 Mbps；并发剂量实验 1→16 流线性，
+  见 docs/IMAGE_DOWNLOAD_REPORT.md §3.5）
+- [x] V0.4-beta 峰值客户端 + 晚高峰基准：`pool.fetch` 16 段实测 3.6–4.65 Mbps（单流 0.4 的
+  ~10 倍）；curl 32/64 流复算后聚合 10.84/22.19 Mbps、**线性扩展至 64 流无拐点**（初版
+  "反 flood 悬崖"结论作废，详见 reports/benchmarks/v04-beta-peak/NOTE.md）
+- [x] Demo 图池：40 张自生成图（1–4 MB 梯度）已走完整 sync 管线发布，清单与 SHA256 见
+  reports/demo/pool-demo-urls-20261122.md
+- [ ] 联通/电信/广电样本：**NOT TESTED**（当前仅中国移动宽带单客户端）
 - [ ] 真实图片托管：**等待站长明确授权**（公网目前仅自生成测试图片）
 - [ ] 正式域名：临时域名切换成本已最小化（域名不入核心逻辑）
+
