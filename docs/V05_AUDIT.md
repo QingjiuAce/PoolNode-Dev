@@ -32,20 +32,31 @@
 | F5 | **keep-alive 关闭检测依赖失败重试** | 已兜底 | `conn.sock is None` 检测可能漏判服务端关闭，但下一次请求失败会被 `_NetworkError` 重试覆盖（fresh conn）；测试 `server_closes_keepalive_reopens` 已覆盖退化路径 |
 | F6 | **单块失败即整臂回退** | 策略问题 | 事件内单块两次失败 → 放弃全部已完成块转单流；v0.6 可考虑"仅重排失败块"（有界） |
 
-## 4. 补充测试清单（合并前必须）
+## 4. 补充测试 T1–T5（2026-11-25 完成）
 
-现有 101 passed / 2 skipped 覆盖了超时、断连、短体、ETag 变化、忽略 Range、竞争领取、重复提交、取消、keep-alive 关闭、内容损坏、发布失败。**仍需补**：
+| # | 场景 | 测试 | 结果 | 关键断言 |
+|---|---|---|---|---|
+| T1 | worker 打不开 staging 句柄（本地 I/O）| `test_t1_local_sink_open_failure_is_terminal` | ✅ | 抛 OSError、不回退、无输出、无 `.part` 残留 |
+| T2 | 磁盘写满（短写）| `test_t2_short_local_write_is_terminal` | ✅ | `OSError('short local write')` |
+| T3 | 外部取消（cancel Event 置位）| `test_t3_external_cancel_aborts_without_publish` | ✅ | 抛 `Cancelled`、**不发布**、无 IN_PROGRESS 残留；在途块可完成、剩余保持 QUEUED |
+| T4 | 重试耗尽 | `test_t4_retry_exhausted_chunk_fails_then_single_fallback` | ✅ | 恰好 1 个 FAILED、其他块 SUCCEEDED、**并行组装被丢弃**、仅单流回退发布（SHA 有效）|
+| T5 | 连接建立异常 | `test_t5_connection_setup_failure_falls_back` | ✅ | 视为传输错误 → 重试 1 次 → 单流回退；无临时残留 |
 
-| # | 场景 | 预期 |
+**测试基线：107 passed / 2 skipped**（原 102 + T1–T5）。
+
+### 为实现 T1–T5 所做的三处最小修复
+
+| 修复 | 文件 | 说明 |
 |---|---|---|
-| T1 | worker 在 `sink.open` 失败（本地 I/O） | 终止、不回退、清理 stage |
-| T2 | 磁盘写满（模拟 `write` 返回短写） | `OSError('short local write')` → 终止 |
-| T3 | 用户取消（尚无常驻 API，模拟 cancel 事件置位） | 无 IN_PROGRESS 残留、无发布 |
-| T4 | 重试耗尽后 chunk 状态 | FAILED + 其他块可能 SUCCEEDED 但不发布 |
-| T5 | 调度器异常（`_open_conn` 抛 OSError） | 回退单流、无临时文件残留 |
+| `Cancelled(RuntimeError)` + `cancel` 参数 | `pool/range_transport.py` | 外部取消（可选 `threading.Event`）在 dynamic 路径生效：worker 在领取前检查、已领取块标记 CANCELLED、抛 `Cancelled` 且**不回退**；static 路径不观察该参数。CLI 未传则行为不变。 |
+| 连接建立错误归类 | 同上 | `_open_conn` 抛出的 OSError/HTTPException 包装为 `_NetworkError` → 享受"重试 1 次 + 单流回退"，避免整次下载因构造连接失败而终止 |
+| 重试计数修正 | 同上 | `retries` 先前把最后那次失败也计入（每块多计 1）；改为只统计**已安排的重试**（每块最多 1） |
+
+> T3 语义说明：取消是 best-effort —— 已在途的块会跑完（≤1 块/worker），队列中未领取的块保持 QUEUED，最终不发布任何内容。T4 的"不发布"指并行组装结果被丢弃；回退单流重新下载并校验后发布，属设计内安全路径。
 
 ## 5. 结论
 
 - **v0.5 代码质量可作为 v0.6 开发基线**（无高危缺陷，回退路径完整）
-- **不建议直接分发**：F1/F2 为已知能力上限，T1–T5 未覆盖
-- 合并路径：v0.6 在 v0.5 + 本报告修复项基础上开发；合并前补齐 T1–T5 与性能回归
+- **T1–T5 已全部通过，合并门槛的测试项满足**；剩余门槛为性能回归与配置审查
+- **不建议直接分发**：F1/F2（chunk/worker 耦合、无对冲）为已知能力上限，由 v0.6 处理
+- 合并路径：v0.6 在 v0.5 + 本节修复基础上开发；合并前补性能回归
