@@ -13,23 +13,39 @@ Contract (v0.6 task order TASK-B):
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-HOST = '160.202.47.187'
-USER = 'root'
-REMOTE_FILE = '/root/pool-probe/probe-results-v06.jsonl'
+DEFAULT_REMOTE_FILE = '/root/pool-probe/probe-results-v06.jsonl'
 REPO = Path(__file__).resolve().parents[1]
 ARCHIVE = REPO / 'reports' / 'benchmarks' / 'v06-monitoring' / 'cn2box-probe.jsonl'
 LOG = REPO / 'reports' / 'benchmarks' / 'v06-monitoring' / 'collect.log'
 SSH_OPTS = ['-o', 'BatchMode=yes', '-o', 'HostKeyAlgorithms=ssh-ed25519',
             '-o', 'ConnectTimeout=15']
+
+# Set by configure(); never defaulted in code so a missing target fails loudly
+# instead of silently contacting a hard-coded production box as root.
+HOST = None
+USER = None
+REMOTE_FILE = DEFAULT_REMOTE_FILE
+
+
+def configure(host: str | None, user: str | None,
+              remote_file: str = DEFAULT_REMOTE_FILE) -> None:
+    global HOST, USER, REMOTE_FILE
+    if not host or not user:
+        raise ValueError('remote host and user must be configured explicitly')
+    if any(c.isspace() or c in "'\"`$;&|<>\\" for c in remote_file):
+        raise ValueError(f'unsafe remote file path: {remote_file!r}')
+    HOST, USER, REMOTE_FILE = host, user, remote_file
 
 
 def log(line: str) -> None:
@@ -83,11 +99,28 @@ def merge_append(local_path: Path, remote_bytes: bytes) -> int:
     return payload.count(b'\n')
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description='CN2 采样盒子结果回收（只增不改）')
+    ap.add_argument('--host', default=os.environ.get('POOL_CN2_HOST'),
+                    help='CN2 盒子地址（或环境变量 POOL_CN2_HOST）')
+    ap.add_argument('--user', default=os.environ.get('POOL_CN2_USER'),
+                    help='SSH 用户（或环境变量 POOL_CN2_USER；不再默认 root）')
+    ap.add_argument('--remote-file',
+                    default=os.environ.get('POOL_CN2_REMOTE_FILE', DEFAULT_REMOTE_FILE),
+                    help='远端 JSONL 路径')
+    args = ap.parse_args(argv)
+    try:
+        configure(args.host, args.user, args.remote_file)
+    except ValueError as exc:
+        print(f'ERROR: {exc}; set --host/--user or POOL_CN2_HOST/POOL_CN2_USER',
+              file=sys.stderr)
+        return 2
+
     LOG.parent.mkdir(parents=True, exist_ok=True)
     try:
-        rc, out = ssh(f'if [ -f {REMOTE_FILE} ]; then '
-                      f'wc -l < {REMOTE_FILE}; sha256sum {REMOTE_FILE} | cut -d" " -f1; '
+        rc, out = ssh(f'if [ -f {shlex.quote(REMOTE_FILE)} ]; then '
+                      f'wc -l < {shlex.quote(REMOTE_FILE)}; '
+                      f'sha256sum {shlex.quote(REMOTE_FILE)} | cut -d" " -f1; '
                       f'else echo MISSING; fi')
         if rc != 0:
             raise RuntimeError(f'ssh failed: {out[:200]}')

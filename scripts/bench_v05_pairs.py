@@ -33,8 +33,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-ASSETS = REPO / 'config' / 'assets.example.yaml'
-ORIGIN = 'https://dl.bszx.site'
+sys.path.insert(0, str(REPO))
+from pool.origin import DEFAULT_ORIGIN, normalize_origin  # noqa: E402
+
+ASSETS = REPO / 'config' / 'bench-assets.yaml'
 AUTO_DYNAMIC_BYTES = 4 * 1024 * 1024  # keep in step with pool.fetch
 
 FILES = {
@@ -90,13 +92,15 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def build_client_cmd(arm, asset, workers, out, assets, metrics_run_id, d_cli='auto'):
+def build_client_cmd(arm, asset, workers, out, assets, metrics_run_id, d_cli='auto',
+                     origin=DEFAULT_ORIGIN):
     """Return (cmd, metrics_path, spec). The arm's CLI contract lives here."""
     spec = ARM_SPECS[arm]
     metrics_path = out / 'metrics' / f'{metrics_run_id}.jsonl'
     cmd = [sys.executable, '-m', 'pool.fetch', asset, str(out / 'dl.bin'),
            '--assets', str(assets), '--workers', str(spec.workers or workers),
-           '--metrics', str(metrics_path), '--run-id', metrics_run_id, '--json']
+           '--metrics', str(metrics_path), '--run-id', metrics_run_id, '--json',
+           '--origin', origin]
     scheduler = spec.cli_scheduler
     if arm == 'D':
         scheduler = d_cli
@@ -135,12 +139,13 @@ def policy_verdict(arm: str, size: int, d_cli: str, *, rc: int, sha_ok: bool,
             and (expected is None or actual == expected))
 
 
-def run_client(arm, workers, asset, out, assets, metrics_run_id, d_cli='auto'):
+def run_client(arm, workers, asset, out, assets, metrics_run_id, d_cli='auto',
+               origin=DEFAULT_ORIGIN):
     spec = ARM_SPECS[arm]
     size = FILES[asset]['size']
     expected = expected_scheduler(arm, size, d_cli)
     cmd, metrics_path, _ = build_client_cmd(
-        arm, asset, workers, out, assets, metrics_run_id, d_cli)
+        arm, asset, workers, out, assets, metrics_run_id, d_cli, origin)
     t0 = time.perf_counter()
     p = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True,
                        errors='replace', timeout=900)
@@ -171,9 +176,9 @@ def run_client(arm, workers, asset, out, assets, metrics_run_id, d_cli='auto'):
     }
 
 
-def run_curl_range(arm_id, asset, workers, out):
+def run_curl_range(arm_id, asset, workers, out, origin=DEFAULT_ORIGIN):
     f = FILES[asset]
-    url = f'{ORIGIN}/{f["path"]}'
+    url = f'{origin}/{f["path"]}'
     spans = client_spans(f['size'], workers)
     t0 = time.perf_counter()
     procs = []
@@ -265,8 +270,20 @@ def main(argv=None) -> int:
                          'real auto-resolution path)')
     ap.add_argument('--gap', type=float, default=2.0, help='seconds between runs')
     ap.add_argument('--out', default=str(REPO / 'reports' / 'benchmarks' / 'v05-pairs'))
+    ap.add_argument('--origin', default=os.environ.get('POOL_ORIGIN', DEFAULT_ORIGIN),
+                    help='内容源 origin（默认 POOL_ORIGIN 环境变量或生产 origin）')
     args = ap.parse_args(argv)
+    try:
+        origin = normalize_origin(args.origin)
+    except ValueError as exc:
+        print(f'invalid --origin: {exc}', file=sys.stderr)
+        return 2
     out = Path(args.out)
+    assets_path = Path(args.assets)
+    if not assets_path.is_file():
+        print(f'assets manifest not found: {assets_path} '
+              f'(set --assets; default {ASSETS})', file=sys.stderr)
+        return 2
     (out / 'metrics').mkdir(parents=True, exist_ok=True)
     arms = [a.strip().upper() for a in args.arms.split(',') if a.strip()]
     unknown = [a for a in arms if a not in ARM_SPECS]
@@ -301,11 +318,11 @@ def main(argv=None) -> int:
                 try:
                     if arm == 'C':
                         rec.update(run_curl_range(metrics_run_id, args.asset,
-                                                  args.workers, out))
+                                                  args.workers, out, origin))
                     else:
                         rec.update(run_client(arm, args.workers, args.asset, out,
                                               args.assets, metrics_run_id,
-                                              args.scheduler))
+                                              args.scheduler, origin))
                 except Exception as exc:  # keep the round going; record and continue
                     rec.update({'policy_ok': False,
                                 'error': f'{exc.__class__.__name__}: {exc}'[:200]})

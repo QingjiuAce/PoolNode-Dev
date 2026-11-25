@@ -6,7 +6,7 @@
 #   bash china-speedtest.sh -u <下载URL> -i <运营商> -n <轮数>
 #   运营商: unicom | telecom | mobile | broadcast | other（手动选择，勿按 IP 猜测）
 # 示例:
-#   bash china-speedtest.sh -u https://dl.bszx.site/submissions/originals/pool-public-smoke-test.jpg -i mobile -n 3
+#   bash china-speedtest.sh -u https://YOUR-POOL-HOST/submissions/originals/pool-public-smoke-test.jpg -i mobile -n 3
 #
 # 输出:
 #   reports/network-tests/<日期>/china-<运营商>.json   （机器可读）

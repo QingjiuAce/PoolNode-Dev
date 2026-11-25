@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Pool PoC V0.2 公网验收（外部真实客户端，不走 SSH 隧道）
+#
+# 范围：公网 HTTPS 证书链、GET/HEAD/Range、方法限制、路径穿越、HTTP→HTTPS
+# 跳转。BASE 可用 POOL_ORIGIN 覆盖；本机回环冒烟见 smoke-test.sh。
+# 输出为 PASS/FAIL 计数（验收证据），不写 JSON 数据文件。
 set -uo pipefail
-BASE="https://dl.bszx.site"
+BASE="${POOL_ORIGIN:-https://dl.bszx.site}"
+HOST=$(echo "$BASE" | sed -E 's|https?://([^/:]+).*|\1|')
 ASSET="submissions/originals/pool-public-smoke-test.jpg"
 URL="$BASE/$ASSET"
 EXPECT_SHA="b60435075bfccd82ecb6fc20706276b0df2559c8f816bc933dbfc6ac7eaa932e"
@@ -12,11 +17,11 @@ bad(){ FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 chk(){ if [[ "$2" == "$3" ]]; then ok "$1 ($2)"; else bad "$1 (期望 $3 实际 $2)"; fi; }
 
 echo "===== 0. TLS 证书与链 ====="
-TLSINFO=$(echo | openssl s_client -connect dl.bszx.site:443 -servername dl.bszx.site 2>/dev/null | openssl x509 -noout -subject -issuer -dates 2>/dev/null)
+TLSINFO=$(echo | openssl s_client -connect "$HOST:443" -servername "$HOST" 2>/dev/null | openssl x509 -noout -subject -issuer -dates 2>/dev/null)
 echo "  $TLSINFO"
-echo | openssl s_client -connect dl.bszx.site:443 -servername dl.bszx.site 2>/dev/null | grep -q "Verify return code: 0 (ok)" \
+echo | openssl s_client -connect "$HOST:443" -servername "$HOST" 2>/dev/null | grep -q "Verify return code: 0 (ok)" \
   && ok "证书链验证 Verify return code: 0 (ok)" || bad "证书链验证"
-TLSVER=$(echo | openssl s_client -connect dl.bszx.site:443 -servername dl.bszx.site 2>/dev/null | grep -oE "TLSv1\.[23]" | head -1)
+TLSVER=$(echo | openssl s_client -connect "$HOST:443" -servername "$HOST" 2>/dev/null | grep -oE "TLSv1\.[23]" | head -1)
 ok "TLS 版本 ($TLSVER)"
 
 echo "===== 1. GET ====="
@@ -70,9 +75,9 @@ chk "PUT 拒绝" "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$URL")" "403"
 chk "DELETE 拒绝" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$URL")" "403"
 
 echo "===== 7. HTTP->HTTPS 重定向 ====="
-R=$(curl -sI "http://dl.bszx.site/$ASSET" | head -1 | awk '{print $2}')
+R=$(curl -sI "http://$HOST/$ASSET" | head -1 | awk '{print $2}')
 chk "HTTP 301" "$R" "301"
-curl -sI "http://dl.bszx.site/$ASSET" | grep -qi '^location: https://' && ok "Location https://" || bad "Location 缺失"
+curl -sI "http://$HOST/$ASSET" | grep -qi '^location: https://' && ok "Location https://" || bad "Location 缺失"
 
 echo "===== 8. 并发（温和：1/5/10）====="
 for N in 1 5 10; do

@@ -5,7 +5,6 @@ from io import BytesIO
 import pathlib
 from pathlib import Path
 import threading
-import time
 
 import pytest
 
@@ -356,9 +355,9 @@ def test_t2_short_local_write_is_terminal(monkeypatch):
         def write(self, block):
             return 0
 
-    ctx = rt.ssl.create_default_context()
+    endpoint = rt._Endpoint('dl.bszx.site', 443, rt.ssl.create_default_context())
     with pytest.raises(OSError, match='short local write'):
-        rt._fetch(ctx, '/fixture.jpg', len(DATA), None, None, ShortSink())
+        rt._fetch(endpoint, '/fixture.jpg', len(DATA), None, None, ShortSink())
 
 
 def test_t3_external_cancel_aborts_without_publish(monkeypatch, tmp_path):
@@ -394,12 +393,27 @@ def test_t4_retry_exhausted_chunk_fails_then_single_fallback(monkeypatch, tmp_pa
     assembly is discarded and only the verified single-GET fallback publishes."""
     spans = dynamic_setup(monkeypatch)
     victim = span_header(spans[0])
+    other_span = spans[1]
+    other_served = threading.Event()
+
     def slow_reset(headers):
         if headers.get('Range') == victim:
-            time.sleep(0.02)  # let other workers complete a chunk first
+            # Deterministic replacement for a timing sleep: wait until another
+            # chunk has actually been served by the mock origin.
+            assert other_served.wait(timeout=5), 'no other chunk was served'
             return ConnectionResetError('reset')
         return None
+
+    def serve(start, end):
+        if (start, end) == other_span:
+            other_served.set()
+        block = DATA[start:end + 1]
+        return Reply(block, 206, {
+            'Content-Range': f'bytes {start}-{end}/{len(DATA)}',
+            'ETag': '"v1"'})
+
     ChunkyConn.fail = slow_reset
+    ChunkyConn.serve = serve
     out = tmp_path / 'out.jpg'
     metrics = rt.Metrics()
     assert rt.download(URL, len(DATA), DIGEST, out, 8, metrics, 'dynamic') == 'single'

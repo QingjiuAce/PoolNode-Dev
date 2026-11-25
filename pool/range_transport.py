@@ -20,9 +20,9 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-_HOST = 'dl.bszx.site'
 _CHUNK = 64 * 1024
 _TIMEOUT = 15  # per blocking socket operation, not a whole-download deadline
 _STRONG = re.compile(r'"[\x21\x23-\x7e\x80-\xff]*"')
@@ -148,6 +148,14 @@ class _TimedConnection(http.client.HTTPSConnection):
                        'tls_ms': round((t3 - t2) * 1000, 2)}
 
 
+@dataclass(frozen=True)
+class _Endpoint:
+    """HTTPS host/port plus the caller's verified TLS context."""
+    host: str
+    port: int
+    context: ssl.SSLContext
+
+
 def _target(url):
     # urlsplit drops certain control characters and elides empty ?/# suffixes.
     if (not isinstance(url, str) or not url.isascii() or not url
@@ -155,9 +163,14 @@ def _target(url):
             or any(c in url for c in ('?', '#', '\\'))):
         raise ValueError('invalid Pool HTTPS URL (percent-encode path characters)')
     parts = urlsplit(url)
-    if parts.scheme != 'https' or parts.netloc.lower() not in (_HOST, _HOST + ':443'):
-        raise ValueError('expected the Pool HTTPS origin without credentials')
-    return parts.path or '/'
+    if (parts.scheme != 'https' or not parts.hostname
+            or parts.username is not None or parts.password is not None):
+        raise ValueError('expected an HTTPS origin without credentials')
+    try:
+        port = parts.port or 443
+    except ValueError as exc:
+        raise ValueError('invalid HTTPS port') from exc
+    return parts.path or '/', parts.hostname, port
 
 
 def _header(response, name):
@@ -177,7 +190,7 @@ def _network():
         raise _NetworkError('Pool HTTPS transport failed') from exc
 
 
-def _fetch(ctx, target, size, span=None, etag=None, sink=None, metrics=None,
+def _fetch(endpoint, target, size, span=None, etag=None, sink=None, metrics=None,
            label='', attempt=1, conn=None):
     """One GET. A None sink validates/discards the probe.
 
@@ -203,13 +216,14 @@ def _fetch(ctx, target, size, span=None, etag=None, sink=None, metrics=None,
         rec = {'kind': 'request', 'ts': round(time.time(), 3), 'label': label,
                'span': span, 'expected_bytes': count, 'attempt': attempt}
         if own:
-            conn = _TimedConnection(_HOST, 443, timeout=_TIMEOUT, context=ctx,
-                                    counter=metrics)
+            conn = _TimedConnection(endpoint.host, endpoint.port, timeout=_TIMEOUT,
+                                    context=endpoint.context, counter=metrics)
             rec['conn_id'] = conn.id
         else:
             rec['conn_id'] = getattr(conn, 'id', None)
     elif own:
-        conn = http.client.HTTPSConnection(_HOST, 443, timeout=_TIMEOUT, context=ctx)
+        conn = http.client.HTTPSConnection(endpoint.host, endpoint.port,
+                                           timeout=_TIMEOUT, context=endpoint.context)
     t_req = time.perf_counter() if rec is not None else None
     t_body = None
     try:
@@ -302,15 +316,15 @@ def _verify(path, size, expected):
             raise _InvalidResponse('SHA-256 mismatch')
 
 
-def _ranges(ctx, target, size, workers, stage, metrics=None):
-    tag = _get(ctx, target, size, (0, 0), metrics=metrics, label='probe')
+def _ranges(endpoint, target, size, workers, stage, metrics=None):
+    tag = _get(endpoint, target, size, (0, 0), metrics=metrics, label='probe')
     n = min(workers, size)
 
     def segment(i):
         span = (size * i // n, size * (i + 1) // n - 1)
         # Independent file descriptions: offsets cannot race across threads.
         with stage.open('r+b', buffering=0) as f:
-            _get(ctx, target, size, span, tag, f, metrics=metrics, label=f'seg{i}')
+            _get(endpoint, target, size, span, tag, f, metrics=metrics, label=f'seg{i}')
 
     with ThreadPoolExecutor(max_workers=n) as pool:
         list(pool.map(segment, range(n)))  # join all writers before fallback
@@ -326,14 +340,15 @@ def _chunk_spans(size, workers):
     return [(size * i // n, size * (i + 1) // n - 1) for i in range(n)]
 
 
-def _open_conn(ctx, metrics=None):
+def _open_conn(endpoint, metrics=None):
     if metrics is not None:
-        return _TimedConnection(_HOST, 443, timeout=_TIMEOUT, context=ctx,
-                                counter=metrics)
-    return http.client.HTTPSConnection(_HOST, 443, timeout=_TIMEOUT, context=ctx)
+        return _TimedConnection(endpoint.host, endpoint.port, timeout=_TIMEOUT,
+                                context=endpoint.context, counter=metrics)
+    return http.client.HTTPSConnection(endpoint.host, endpoint.port,
+                                       timeout=_TIMEOUT, context=endpoint.context)
 
 
-def _dynamic(ctx, target, size, workers, stage, metrics=None, cancel=None):
+def _dynamic(endpoint, target, size, workers, stage, metrics=None, cancel=None):
     """Chunk-queue scheduler (v0.5): workers claim chunks from a shared queue
     and own one keep-alive connection reused across their chunks.
 
@@ -347,7 +362,7 @@ def _dynamic(ctx, target, size, workers, stage, metrics=None, cancel=None):
     spans = _chunk_spans(size, workers)
     if len(spans) < 2:
         raise _InvalidResponse('single-chunk plan belongs to the single GET path')
-    tag = _get(ctx, target, size, (0, 0), metrics=metrics, label='probe')
+    tag = _get(endpoint, target, size, (0, 0), metrics=metrics, label='probe')
     pending = queue.Queue()
     chunks = [{'id': i, 'span': span, 'state': 'QUEUED', 'worker': None,
                'retries': 0, 't_claim': None, 't_done': None}
@@ -382,13 +397,13 @@ def _dynamic(ctx, target, size, workers, stage, metrics=None, cancel=None):
                     while True:
                         if conn is None:
                             try:
-                                conn = _open_conn(ctx, metrics)
+                                conn = _open_conn(endpoint, metrics)
                             except (OSError, http.client.HTTPException) as exc:
                                 # Connection setup is transport: retry once, then
                                 # fall back rather than fail the whole download.
                                 raise _NetworkError('connection setup failed') from exc
                         try:
-                            _fetch(ctx, target, size, chunk['span'], tag, sink,
+                            _fetch(endpoint, target, size, chunk['span'], tag, sink,
                                    metrics=metrics,
                                    label=f'w{wid}c{chunk["id"]}', attempt=attempt,
                                    conn=conn)
@@ -449,7 +464,7 @@ def download(url: str, size: int, sha256: str, output: Path, workers: int,
     are terminal. Publication requires same-directory hard-link support and
     never replaces an existing name, including a dangling symlink.
     """
-    target = _target(url)
+    target, host, port = _target(url)
     if type(size) is not int or size < 0:
         raise ValueError('invalid manifest size')
     if not isinstance(sha256, str) or not re.fullmatch(r'[0-9a-fA-F]{64}', sha256):
@@ -463,6 +478,7 @@ def download(url: str, size: int, sha256: str, output: Path, workers: int,
         raise FileExistsError(output)
     ctx = ssl.create_default_context()
     ctx.set_alpn_protocols(['http/1.1'])
+    endpoint = _Endpoint(host, port, ctx)
     mode = 'single'
     fd, name = tempfile.mkstemp(dir=output.parent, prefix='.pool-', suffix='.part')
     stage = Path(name)
@@ -471,16 +487,16 @@ def download(url: str, size: int, sha256: str, output: Path, workers: int,
         if workers > 1 and size >= 2:
             try:
                 if scheduler == 'dynamic':
-                    _dynamic(ctx, target, size, workers, stage, metrics, cancel)
+                    _dynamic(endpoint, target, size, workers, stage, metrics, cancel)
                 else:
-                    _ranges(ctx, target, size, workers, stage, metrics)
+                    _ranges(endpoint, target, size, workers, stage, metrics)
                 _verify(stage, size, sha256.lower())
                 mode = 'range'
             except (_InvalidResponse, _NetworkError):
                 pass
         if mode == 'single':
             with stage.open('wb') as f:  # truncate any partially assembled object
-                _get(ctx, target, size, sink=f, metrics=metrics, label='single')
+                _get(endpoint, target, size, sink=f, metrics=metrics, label='single')
             _verify(stage, size, sha256.lower())
         os.link(stage, output)  # atomic create-if-absent, no check/replace race
         return mode

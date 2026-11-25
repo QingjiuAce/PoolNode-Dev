@@ -43,3 +43,24 @@ def test_validate_jsonl_requires_ts_and_arms():
     assert cb.validate_jsonl(rec('a') + rec('b')) == 2
     with pytest.raises(ValueError, match='missing ts/arms'):
         cb.validate_jsonl(b'{"ts": "a"}\n')
+
+
+def test_configure_requires_explicit_host_and_user():
+    with pytest.raises(ValueError, match='explicitly'):
+        cb.configure(None, 'someuser')
+    with pytest.raises(ValueError, match='explicitly'):
+        cb.configure('example.invalid', None)
+
+
+def test_configure_rejects_shell_metacharacters_in_remote_path():
+    with pytest.raises(ValueError, match='unsafe'):
+        cb.configure('example.invalid', 'user', '/root/x; rm -rf /')
+    with pytest.raises(ValueError, match='unsafe'):
+        cb.configure('example.invalid', 'user', '/root/x y')
+
+
+def test_main_without_target_fails_loudly(monkeypatch, capsys):
+    monkeypatch.delenv('POOL_CN2_HOST', raising=False)
+    monkeypatch.delenv('POOL_CN2_USER', raising=False)
+    assert cb.main([]) == 2
+    assert 'POOL_CN2_HOST' in capsys.readouterr().err

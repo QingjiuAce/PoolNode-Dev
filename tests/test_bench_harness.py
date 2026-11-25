@@ -120,3 +120,16 @@ def test_manifest_is_append_only(tmp_path):
     bench.append_jsonl(path, {'run_id': 'r2', 'arm': 'D'})
     rows = [json.loads(l) for l in path.read_text(encoding='utf-8').splitlines()]
     assert [r['run_id'] for r in rows] == ['r1', 'r2']
+
+
+def test_missing_assets_manifest_fails_before_network(tmp_path, capsys):
+    rc = bench.main(['--out', str(tmp_path), '--pairs', '1', '--arms', 'B,D',
+                     '--assets', str(tmp_path / 'missing.yaml')])
+    assert rc == 2
+    assert 'assets manifest not found' in capsys.readouterr().err
+    assert not (tmp_path / 'runs.jsonl').exists()
+
+
+def test_default_assets_manifest_exists():
+    assert bench.ASSETS.is_file()
+    assert bench.ASSETS.name == 'bench-assets.yaml'

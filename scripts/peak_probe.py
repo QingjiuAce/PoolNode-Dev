@@ -37,11 +37,28 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
-HOST = 'dl.bszx.site'
+DEFAULT_ORIGIN = 'https://dl.bszx.site'
+HOST = urlsplit(DEFAULT_ORIGIN).hostname
 PORT = 443
 STRONG = re.compile(r'"[\x21\x23-\x7e\x80-\xff]*"')
 CHUNK = 64 * 1024
+
+
+def configure_origin(value: str) -> None:
+    """Set the probe target; standalone script, so parsing lives here.
+
+    Deployed alone on the CN2 box: it must not depend on the pool package.
+    """
+    global HOST, PORT
+    parts = urlsplit(value)
+    if (parts.scheme != 'https' or not parts.hostname
+            or parts.username is not None or parts.password is not None
+            or parts.path not in ('', '/') or parts.query or parts.fragment):
+        raise SystemExit(f'invalid --origin (https://host[:port] required): {value}')
+    HOST = parts.hostname
+    PORT = parts.port or 443
 
 # 自生成测试图（无第三方版权），SHA256 为生成器登记值。
 FIXTURES = {
@@ -298,7 +315,10 @@ def main(argv=None):
     ap.add_argument('--slot-guard', action='store_true', help='非采样时段静默跳过')
     ap.add_argument('--no-dedupe', action='store_true', help='允许同一小时重复记录')
     ap.add_argument('--force', action='store_true', help='跳过全部守卫（手动验证用）')
+    ap.add_argument('--origin', default=os.environ.get('POOL_ORIGIN', DEFAULT_ORIGIN),
+                    help='测量目标 origin（默认 POOL_ORIGIN 环境变量或生产 origin）')
     args = ap.parse_args(argv)
+    configure_origin(args.origin)
 
     now = hk_now()
     if not args.force:

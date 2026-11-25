@@ -2,6 +2,10 @@
 # =====================================================================
 # Pool PoC V0.1 — HTTP 面冒烟测试（在服务器本机运行）
 #
+# 范围：本机回环 vhost 的基础静态行为（GET/304/Range/404/方法限制）。
+# 与 public-acceptance.sh 不重复：后者从外部验证公网 HTTPS、证书与
+# HTTP→HTTPS 跳转；两者输出均为 PASS/FAIL 计数，不产生 JSON 数据。
+#
 # 用法: ./smoke-test.sh [BASE_URL]
 #   默认 BASE_URL=http://127.0.0.1:8080（回环 vhost）
 #   需先 sync 过测试资产 test-poc-001（pool-tests/test-poc-001.png）

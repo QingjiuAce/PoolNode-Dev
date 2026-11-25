@@ -40,12 +40,17 @@ pool.fetch（客户端，V0.4 新增）    ← 晚高峰分段并发下载器（
 > **发布边界**：服务端生产为 **V0.2（冻结）**，正式客户端分发为 **v0.4-beta**。
 > `v0.5.0-rc.1` 仅本地 tag，未发布；`0.6.0.dev1` 为内部开发构建，未授权 Alpha。
 > 版本层级与单一来源见 [docs/VERSION_POLICY.md](docs/VERSION_POLICY.md)。
+>
+> **资产口径**：bench-6m = 5,403,720 B（十进制 5.40 MB / 二进制 5.15 MiB）。历史文档中的
+> “5.15MB”“5.4 MiB”“5.4MB”均指同一文件，比较时以字节数为准。
 
 ## 快速开始（本地开发）
 
+要求 **Python ≥ 3.10**（CI 覆盖 3.10–3.14，Ubuntu + Windows）。
+
 ```bash
-pip install -r requirements.txt pytest
-python -m pytest tests/          # 自动化测试（62+ 用例，含参数化）
+python -m pip install -r requirements-dev.txt
+python -m pytest tests/          # 当前 243 passed / 1 skipped
 ```
 
 ## 快速开始（服务器部署）
@@ -121,7 +126,7 @@ docs/      ARCHITECTURE / DEPLOYMENT / SECURITY / TLS_DEPLOYMENT / CHINA-TEST
 - [x] 晚高峰根因实测：回程 PCCW per-flow 整形（单流 0.5 Mbps；并发剂量实验 1→16 流线性，
   见 docs/IMAGE_DOWNLOAD_REPORT.md §3.5）
 - [x] V0.4-beta 峰值客户端 + 晚高峰基准：`pool.fetch` 16 段实测 3.6–4.65 Mbps（单流 0.4 的
-  ~10 倍）；curl 32/64 流复算后聚合 10.84/22.19 Mbps、**线性扩展至 64 流无拐点**（初版
+  ~10 倍）；curl 32/64 流复算后聚合 10.84/22.17 Mbps、**线性扩展至 64 流无拐点**（初版
   "反 flood 悬崖"结论作废，详见 reports/benchmarks/v04-beta-peak/NOTE.md）
 - [x] Demo 图池：40 张自生成图（1–4 MB 梯度）已走完整 sync 管线发布，清单与 SHA256 见
   reports/demo/pool-demo-urls-20261122.md

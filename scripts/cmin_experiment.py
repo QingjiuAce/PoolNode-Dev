@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import secrets
 import shutil
@@ -89,7 +90,10 @@ def main(argv=None) -> int:
     ap.add_argument('--only-hours', default='', help='仅这些小时运行（逗号分隔）')
     ap.add_argument('--dedupe-hour', action='store_true', help='本小时已跑过则跳过')
     ap.add_argument('--timeout', type=float, default=120.0)
+    ap.add_argument('--origin', default=os.environ.get('POOL_ORIGIN', pp.DEFAULT_ORIGIN),
+                    help='内容源 origin（默认 POOL_ORIGIN 环境变量或生产 origin）')
     args = ap.parse_args(argv)
+    pp.configure_origin(args.origin)
 
     now = pp.hk_now()
     if args.only_hours:

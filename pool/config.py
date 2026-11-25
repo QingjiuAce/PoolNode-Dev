@@ -102,11 +102,16 @@ def load_config(path: str | pathlib.Path) -> PoolConfig:
     if "" in hosts or any(" " in h or "/" in h for h in hosts):
         raise ConfigError(f"upstream.allowed_hosts 含非法主机名: {hosts}")
 
+    allow_http = upstream_raw.get("allow_loopback_http", False)
+    if not isinstance(allow_http, bool):
+        raise ConfigError(
+            "upstream.allow_loopback_http 必须是 YAML 布尔值 true 或 false")
+
     upstream = UpstreamConfig(
         allowed_hosts=hosts,
         connect_timeout=int(upstream_raw.get("connect_timeout", 10)),
         read_timeout=int(upstream_raw.get("read_timeout", 60)),
-        allow_loopback_http=bool(upstream_raw.get("allow_loopback_http", False)),
+        allow_loopback_http=allow_http,
     )
 
     guard_system_disk = raw.get("guard_system_disk", True)

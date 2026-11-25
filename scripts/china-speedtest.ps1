@@ -3,7 +3,7 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File china-speedtest.ps1 `
-#       -Url https://dl.bszx.site/submissions/originals/pool-public-smoke-test.jpg `
+#       -Url https://YOUR-POOL-HOST/submissions/originals/pool-public-smoke-test.jpg `
 #       -Isp mobile -Rounds 3
 #
 #   -Isp  : unicom | telecom | mobile | broadcast | other   (choose MANUALLY,
@@ -20,7 +20,7 @@
 # because proxied results would not reflect the real mainland route.
 # =====================================================================
 param(
-    [string]$Url = "https://dl.bszx.site/submissions/originals/pool-public-smoke-test.jpg",
+    [string]$Url = "$(if ($env:POOL_ORIGIN) { $env:POOL_ORIGIN.TrimEnd('/') } else { 'https://dl.bszx.site' })/submissions/originals/pool-public-smoke-test.jpg",
     [ValidateSet("unicom", "telecom", "mobile", "broadcast", "other")]
     [string]$Isp = "other",
     [int]$Rounds = 3,

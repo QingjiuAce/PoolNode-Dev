@@ -5,9 +5,9 @@ from __future__ import annotations
 import functools
 import hashlib
 import http.server
-import socket
 import sys
 import threading
+import time
 import pathlib
 
 import pytest
@@ -17,14 +17,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from helpers import make_png  # noqa: E402
-
-
-def free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
 
 
 def sha256_of(data: bytes) -> str:
@@ -75,10 +67,24 @@ class LocalImageServer:
         self.thread.start()
 
     def restart_with(self, handler_cls) -> None:
-        """用自定义 handler 类重启（保持同一端口）。"""
+        """用自定义 handler 类重启（保持同一端口）。
+
+        端口刚释放时 Windows 可能短暂拒绝重绑；使用有界重试，而不是无限
+        等待或固定长 sleep。每次尝试之间让出调度，上限约 1 秒。
+        """
         self.stop()
         self.handler_cls = handler_cls
-        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", self.port), self.handler_cls)
+        last_error = None
+        for _ in range(100):
+            try:
+                self.server = http.server.ThreadingHTTPServer(
+                    ("127.0.0.1", self.port), self.handler_cls)
+                break
+            except OSError as exc:  # TIME_WAIT / transient bind refusal
+                last_error = exc
+                time.sleep(0.01)
+        else:
+            raise last_error
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
 

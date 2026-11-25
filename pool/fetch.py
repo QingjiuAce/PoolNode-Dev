@@ -9,19 +9,20 @@ import sys
 import time
 
 from . import permissions, validator
+from .origin import DEFAULT_ORIGIN, resolve_origin
 from .range_transport import Metrics, download
 
-ORIGIN = 'https://dl.bszx.site'
 MAX_BYTES = 20 * 1024 * 1024  # v1 product limit, independent of server config
 
 
-def select(assets_path: pathlib.Path, asset_id: str) -> tuple[str, str, int | None]:
+def select(assets_path: pathlib.Path, asset_id: str,
+           origin: str = DEFAULT_ORIGIN) -> tuple[str, str, int | None]:
     asset = permissions.get_asset(permissions.load_assets(assets_path), asset_id)
     permissions.check_permission(asset)
     rel = validator.validate_relative_path(asset.relative_path)
     if not asset.expected_sha256:
         raise ValueError('缺少登记的 expected_sha256，拒绝下载')
-    return f'{ORIGIN}/{rel}', asset.expected_sha256, asset.size_bytes
+    return f'{origin}/{rel}', asset.expected_sha256, asset.size_bytes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
                         help='实验运行 ID（默认自动生成）；写入本次运行的每条 metrics 记录')
     parser.add_argument('--json', action='store_true',
                         help='stdout 输出单行机器可读 JSON（便于实验 Harness 解析）')
+    parser.add_argument('--origin',
+                        help=f'内容源 origin（默认 POOL_ORIGIN 环境变量，再退回 {DEFAULT_ORIGIN}）')
     args = parser.parse_args(argv)
     metrics = Metrics(run_id=args.run_id) if args.metrics is not None else None
     dumped = False
@@ -50,7 +53,8 @@ def main(argv: list[str] | None = None) -> int:
             # file is a different run, and silently replacing it destroys the
             # only copy of that run's diagnostics.
             raise FileExistsError(f'metrics 文件已存在，拒绝覆盖: {args.metrics}')
-        url, digest, registered = select(args.assets, args.asset_id)
+        origin = resolve_origin(args.origin)
+        url, digest, registered = select(args.assets, args.asset_id, origin)
         if registered is not None and args.size is not None and registered != args.size:
             raise ValueError('--size 与登记字节数不一致')
         size = registered if registered is not None else args.size
@@ -70,8 +74,8 @@ def main(argv: list[str] | None = None) -> int:
         result = {'asset_id': args.asset_id, 'sha256': digest, 'mode': mode,
                   'scheduler': scheduler, 'size': size, 'workers': workers,
                   'run_id': metrics.run_id if metrics is not None else None,
-                  'output': str(args.output), 'wall_ms': round(wall * 1000, 2),
-                  'error': None}
+                  'origin': origin, 'output': str(args.output),
+                  'wall_ms': round(wall * 1000, 2), 'error': None}
         if args.json:
             print(json.dumps(result, ensure_ascii=False))
         else:
