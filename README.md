@@ -2,7 +2,9 @@
 
 **面向 [蓝色大肥鱼.com](https://蓝色大肥鱼.com) 的独立、只读、可撤销备用原图下载节点。**
 
-在线节点：**https://dl.bszx.site**
+节点域名：**dl.bszx.site**（根路径按设计返回 404；文件必须按完整路径访问）
+
+示例文件：**https://dl.bszx.site/pool-tests/bench-2m.jpg**
 
 PoolNode 与现有 GitHub Raw 发布体系**完全解耦**：不替换 Raw、不改原站代码、不改已发布 URL。
 它只做一件事——把**经站长明确授权**的原图，以与原仓库一致的路径，稳定地提供为可直接下载的 HTTPS 静态文件。
@@ -176,6 +178,11 @@ https://raw.githubusercontent.com/lmy414/ai-girl-stickers/main/owner-picks/blue-
 https://dl.bszx.site/owner-picks/blue-maid.png
 ```
 
+> **这是路径格式示例，不代表该文件当前可下载。** `owner-picks/blue-maid.png`
+> 尚未获得站长授权、未同步到节点，访问会返回 **404**。只有白名单中
+> `approved` 且已执行 `sync` 的文件才会返回 200；当前实际可访问的是测试资产
+> `pool-public-smoke-test`、`bench-2m`、`bench-6m`。
+
 收录路径以白名单实际登记为准：`dist/submissions/originals/<角色>/<文件名>`、
 `owner-picks/<文件名>`、`blue-fish-originals/<文件名>`。
 
@@ -247,7 +254,7 @@ python -m compileall -q pool scripts tests
 ## 当前进度
 
 - [x] V0.1 内部 PoC：核心 CLI + 回环静态服务
-- [x] V0.2 公网 HTTPS：**https://dl.bszx.site**（临时测试域名）
+- [x] V0.2 公网 HTTPS：`dl.bszx.site`（临时测试域名；根路径按设计 404，文件按完整路径访问）
 - [x] 晚高峰根因实测与分段并发客户端（v0.4-beta）
 - [x] 40 张自生成 Demo 图走完整发布管线
 - [x] 安全基线：白名单、SHA256、原子发布、系统盘护栏
