@@ -1,5 +1,6 @@
 b707026283511ca65d48506946537d1ccd680ba913eaf58b268dc493d114b631  pool-all-20261126-after-fix.bundle
+82a80523250fa69f434937570eddda740194dcd29755782169672cf274359a88  pool-all-20261126-final.bundle
 
-# 说明：本清单只包含整改后 Bundle 一个二进制对象；审计文档与代码的完整性
-# 由 Bundle 内的 Git 对象哈希保证。
+# 说明：本清单包含两份整改后 Bundle；alpha HEAD 分别为 0b53e12 / 627cb43。
+# 审计文档与代码的完整性由 Bundle 内的 Git 对象哈希保证。
 # 阶段 0 备份的 70 项清单见 backup_sha256.txt（独立文件，未修改）。
