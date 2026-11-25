@@ -34,6 +34,12 @@ pool.fetch（客户端，V0.4 新增）    ← 晚高峰分段并发下载器（
 | V0.2 | 公网 HTTPS 上线 **https://dl.bszx.site**（临时测试域名）：DNS/证书/301/自动续期；公网验收 33/33 | docs/TLS_DEPLOYMENT.md · docs/V02_TEST_REPORT.md |
 | V0.2.x | 晚高峰回程实测：PCCW per-flow 整形（单流 0.5 Mbps，16 流并发 6.35 Mbps）→ 根因/解法矩阵/路线图 | docs/IMAGE_DOWNLOAD_REPORT.md |
 | V0.4-beta | **峰值客户端 `pool.fetch`**（16 段 Range + If-Range/ETag/206 校验 + 单链路降级）+ 40 张 Demo 图池 + 晚高峰基准（22:48–23:25，7 工况 × 5 rep） | docs/PEAK_DOWNLOAD_CLIENT.md · reports/benchmarks/v04-beta-peak/ · reports/demo/ |
+| v0.5.0-rc.1 | 候选：动态分块队列 + 连接复用 + T1–T5；策略对比已勘误，未重新验收 | docs/V05_DYNAMIC_SCHEDULER.md · reports/benchmarks/v05-rc1/ERRATA_2026-11-26.md |
+| 0.6.0.dev1 | **当前分支内部构建**：v0.5 调度 + 安全基线 + 测量工具；自适应算法尚未实现，**不是** Alpha 发布 | docs/V06_DESIGN.md · docs/VERSION_POLICY.md |
+
+> **发布边界**：服务端生产为 **V0.2（冻结）**，正式客户端分发为 **v0.4-beta**。
+> `v0.5.0-rc.1` 仅本地 tag，未发布；`0.6.0.dev1` 为内部开发构建，未授权 Alpha。
+> 版本层级与单一来源见 [docs/VERSION_POLICY.md](docs/VERSION_POLICY.md)。
 
 ## 快速开始（本地开发）
 

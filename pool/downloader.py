@@ -18,12 +18,18 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import BinaryIO
 
+from . import __version__
 from .config import UpstreamConfig
 
 CHUNK_SIZE = 256 * 1024
 SAMPLE_BYTES = 256 * 1024  # check-upstream 采样的字节数
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def user_agent(purpose: str) -> str:
+    """HTTP User-Agent derived from the single package version source."""
+    return f"pool-poc/{__version__} (+{purpose})"
 
 
 class UpstreamError(Exception):
@@ -182,7 +188,7 @@ def check_upstream(source_url: str, cfg: UpstreamConfig) -> dict:
     # --- HEAD（如上游支持）---
     head_info: dict = {"ok": False}
     try:
-        conn.request("HEAD", u.path, headers={"User-Agent": "pool-poc/0.1 (+check-upstream)"})
+        conn.request("HEAD", u.path, headers={"User-Agent": user_agent("check-upstream")})
         resp = conn.getresponse()
         resp.read()
         head_info = {
@@ -198,7 +204,7 @@ def check_upstream(source_url: str, cfg: UpstreamConfig) -> dict:
     # --- GET 取样 ---
     t0 = time.monotonic()
     try:
-        conn.request("GET", u.path, headers={"User-Agent": "pool-poc/0.1 (+check-upstream)"})
+        conn.request("GET", u.path, headers={"User-Agent": user_agent("check-upstream")})
         resp = conn.getresponse()
     except OSError as e:
         conn.close()
@@ -247,7 +253,7 @@ def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path | BinaryIO
                      max_size: int) -> tuple[Path | BinaryIO, str, int]:
     """流式下载到暂存路径或由调用方持有的已打开文件。"""
     _url_allowed(source_url, cfg)
-    req = urllib.request.Request(source_url, headers={"User-Agent": "pool-poc/0.1 (+sync)"})
+    req = urllib.request.Request(source_url, headers={"User-Agent": user_agent("sync")})
     opener = _build_opener(cfg)
 
     try:
