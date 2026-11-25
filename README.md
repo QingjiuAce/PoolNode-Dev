@@ -2,7 +2,9 @@
 
 **面向 [蓝色大肥鱼.com](https://蓝色大肥鱼.com) 的独立、只读、可撤销备用原图下载节点。**
 
-在线节点：**https://dl.bszx.site**
+节点域名：**dl.bszx.site**（根路径按设计返回 404；文件必须按完整路径访问）
+
+示例文件：**https://dl.bszx.site/pool-tests/bench-2m.jpg**
 
 PoolNode 与现有 GitHub Raw 发布体系**完全解耦**：不替换 Raw、不改原站代码、不改已发布 URL。
 它只做一件事——把**经站长明确授权**的原图，以与原仓库一致的路径，稳定地提供为可直接下载的
@@ -23,7 +25,11 @@ https://raw.githubusercontent.com/lmy414/ai-girl-stickers/main/owner-picks/blue-
 https://dl.bszx.site/owner-picks/blue-maid.png
 ```
 
-公网目前提供的是**自生成测试图**，可直接验证：
+> **这是路径格式示例，不代表该文件当前可下载。** `owner-picks/blue-maid.png`
+> 尚未获得站长授权、未同步到节点，访问会返回 **404**。只有白名单中
+> `approved` 且已执行 `sync` 的文件才会返回 200。
+
+公网目前**实际可访问**的是以下自生成测试图（已逐一实测 200）：
 
 | 文件 | URL | 字节数 | SHA-256 |
 |---|---|---:|---|
@@ -35,6 +41,8 @@ https://dl.bszx.site/owner-picks/blue-maid.png
 curl -fLO https://dl.bszx.site/submissions/originals/pool-public-smoke-test.jpg
 sha256sum pool-public-smoke-test.jpg
 ```
+
+根路径 `/` 与任何未授权/未发布的路径统一返回 **404**，这是设计行为，不是节点故障。
 
 节点只提供 `GET` / `HEAD`，原生支持 `Range` / `206` / 强 `ETag` / `If-Range`，
 不提供上传、目录索引或动态接口。
@@ -227,7 +235,7 @@ python -m compileall -q pool scripts tests
 ## 当前进度
 
 - [x] V0.1 内部 PoC：核心 CLI + 回环静态服务
-- [x] V0.2 公网 HTTPS：**https://dl.bszx.site**（临时测试域名）
+- [x] V0.2 公网 HTTPS：`dl.bszx.site`（临时测试域名；根路径按设计 404，文件按完整路径访问）
 - [x] 晚高峰根因实测与分段并发客户端（v0.4-beta，独立发布线）
 - [x] 40 张自生成 Demo 图走完整发布管线
 - [x] 公网安全边界：只读、白名单、SHA256、原子发布
