@@ -2,7 +2,7 @@
 
 > 分支：`feature/v0.6-alpha`
 > 整改前 HEAD：`1e38122`
-> 代码整改后 HEAD：`8bcf1e4`；此后提交均为审计文档与验证输出
+> 代码整改后 HEAD：`1d63e39`（含独立复查修复）；本报告与验证输出随后提交
 > 执行原则：生产冻结、不推送、不改历史、不伪造网络数据；所有结论以仓库与实测为准。
 
 ---
@@ -55,7 +55,7 @@
 | 校验 | 20/20 文件、每份 24 行、JSONL 可解析、SHA 与 `recovery_index.json` 一致；归档与来源逐字节一致 |
 | 代码 | `Metrics.dump`：同目录临时文件 + fsync + `os.link` 排他创建；失败清理临时文件；每条记录带 `run_id`；`fetch --run-id`；目标已存在时在网络请求前失败 |
 | Harness | C_MIN：两个 C_MIN 值背靠背配对、worker 组随机、`run_id`/`arm_id` |
-| 测试 | 新增 `test_metrics_persistence.py`（7）与 `test_cmin_experiment.py`（3）；全量 **123 passed / 2 skipped** |
+| 测试 | 新增 `test_metrics_persistence.py`（7；复查后扩至 11）与 `test_cmin_experiment.py`（3）；全量 **123 passed / 2 skipped** |
 | 数据缺口 | 健康矩阵其余 80 臂、20/21/22 点各 10 臂的逐请求 metrics 在提交前已被覆盖，**不可恢复**；仅 `runs.jsonl` 汇总保留（如实记录，未补造） |
 
 ### 阶段 2：V0.5 RC Harness 策略修复
@@ -66,7 +66,7 @@
 | 操作 | `ARM_SPECS` 显式声明 A/B/C/D；B 传 static，D 传 auto；`policy_ok` 由客户端 JSON/metrics 的 `scheduler` 与模式校验；metrics 文件按 run_id 唯一；manifest 追加 + run_id/arm_id；重叠运行 `SKIPPED_OVERLAP`；`fetch --json` |
 | 勘误 | `ERRATA_2026-11-26.md`：撤回健康窗 ≤10%、P90 ≤15%、劣化窗 ≥30% 等全部旧结论；保留 SHA 完整性与同路径噪声对照（降级） |
 | 复测计划 | `RETEST_PLAN_2026-11-26.md`：健康/劣化各 ≥5 组、同资产同并发、B/D 平衡、全量 metrics、SHA、单流 + CN2 对照、重叠标记 |
-| 测试 | `test_bench_harness.py` 13 项，含“B 实际 dynamic 必须判失败”回归；全量 **136 passed / 2 skipped** |
+| 测试 | `test_bench_harness.py` 13 项（复查后扩至 19），含“B 实际 dynamic 必须判失败”回归；全量 **136 passed / 2 skipped** |
 | 未完成 | **真实网络复测未执行**；V0.5 RC 不重新验收 |
 
 ### 阶段 3：Alpha 安全基线恢复
@@ -76,7 +76,7 @@
 | 修改前状态 | `pool/` 树与 `v0.5.0-rc.1` 相同（`82966c4…`），缺 dev 的 guarded IO、系统盘护栏、Windows 根目录修复 |
 | 操作 | 逐文件定向移植 dev 最终版：`_guarded_io.py`、`cli/config/storage/downloader/validator/permissions`、`config.example.yaml`、对应测试；**未 merge dev** |
 | T1–T5 | alpha `be489a3` 与 release `884db00` 的 `range_transport.py` / `test_peak_download.py` diff 为空；无重复实现 |
-| Windows | `probe != probe.parent` 修复；新增 4 项盘符根目录/文件/锚点回归测试 |
+| Windows | `probe != probe.parent` 修复；新增 4 项盘符根目录/文件/锚点回归测试（复查后扩至 6，含真实 junction） |
 | 测试对比 | dev 隔离 worktree：**157 passed / 1 skipped**；alpha 移植后：**195 passed / 1 skipped**；差值 +38 全部为 alpha 独有测量/审计测试 |
 | 跳过 | `test_paths.py:71`（Windows 创建符号链接需特权），不计为通过 |
 | 未完成 | 无 P0 项；真实 mount 操作仍由模拟测试覆盖 |
@@ -88,8 +88,13 @@
 | 操作 | 阶段 3 后 Bundle + 全部整改后 Bundle；均 `git bundle verify`；从 final bundle clone 并跑全量测试 |
 | 中间检查点 | `pool-all-20261126-after-fix.bundle`，`b7070262…`，alpha `0b53e12` |
 | 最终检查点 | `pool-all-20261126-final.bundle`，`82a80523…`，alpha `627cb43`；克隆后 **255 passed / 1 skipped** |
-| 后续提交 | `8bcf1e4`（origin API 边界校验）与本报告提交在 final bundle 之后；收口时另建 closeout Bundle |
+| 后续提交 | `8bcf1e4`（origin API 边界）、`1d63e39`（独立复查修复）与本报告提交在 final bundle 之后；收口时另建 closeout Bundle |
 | 边界 | 本地备份；未 push；未异机 |
+
+### 阶段 4 补充：独立复查后的最终 Bundle
+
+`pool-all-20261126-closeout-final.bundle` 覆盖 `1d63e39` 及本报告提交；SHA 见外部
+`CLOSEOUT_BUNDLE_SHA256.txt`。克隆验证命令与结果见 §6。
 
 ### 阶段 5：版本标识治理
 
@@ -146,10 +151,10 @@
 |---|---|
 | 当前分支 | `feature/v0.6-alpha` |
 | 修改前 HEAD | `1e38122` |
-| 代码整改后 HEAD | `8bcf1e4` |
-| 提交说明 | `2f76784`（本报告）、`c5f2b4c`（最终验证输出）、`9bbca8c`（collector 文档）为整改后的文档/证据提交 |
+| 代码整改后 HEAD | `1d63e39` |
+| 提交说明 | `2f76784`（本报告）、`c5f2b4c`（最终验证输出）、`9bbca8c`（collector 文档）、`1d63e39`（独立复查修复）为整改后的文档/证据/修复提交 |
 | 工作区 | 干净（0 修改 / 0 暂存 / 0 未跟踪） |
-| 新增提交 | `233b96f`、`1cb0d74`、`7d08faa`、`0b53e12`、`8a947ad`、`3209811`、`bff112a`、`627cb43`、`8bcf1e4`、`2f76784`、`c5f2b4c`、`9bbca8c` |
+| 新增提交 | `233b96f`、`1cb0d74`、`7d08faa`、`0b53e12`、`8a947ad`、`3209811`、`bff112a`、`627cb43`、`8bcf1e4`、`2f76784`、`c5f2b4c`、`9bbca8c`、`1d63e39` |
 | 本地独有 | `release/v0.5`、`v0.5.0-rc.1`、`dev`+14、alpha、investigate/* 均未推送 |
 | 远程推送 | **无** |
 | Tag | `v0.5.0-rc.1` 未移动（`24317ae → 0376444`） |
@@ -342,7 +347,7 @@ Windows 专属的 junction/reparse 与 `_system_root` 测试在本机实际执�
 | V0.5 RC | Harness 已修复、旧结论已勘误；**尚不具备重新验收条件**（缺真实复测） |
 | V0.6 Alpha | **安全基线已恢复**；自适应算法未实现、未授权 |
 | C_MIN | 具备继续实验条件；5 组复验采样中；01:15 旧顺序不计入 |
-| Git 备份 | 本地：✅ 三份 Bundle；异机：❌；远程：❌ |
+| Git 备份 | 本地：✅ 四份 Bundle；异机：❌；远程：❌ |
 | P0 | **已完成**（A1–A10 见下） |
 | P1 | **已完成**，CI 远端运行待授权 push |
 | P2 | **已完成** |
@@ -351,7 +356,7 @@ Windows 专属的 junction/reparse 与 `_system_root` 测试在本机实际执�
 
 | 编号 | 验收项 | 状态 | 证据 |
 |---|---|---|---|
-| A1 | 数据备份 | ✅ 本地 | Bundle ×3、工作区 diff、46 份数据副本、SHA 清单 |
+| A1 | 数据备份 | ✅ 本地 | Bundle ×4、工作区 diff、46 份数据副本、SHA 清单 |
 | A2 | Metrics 不覆盖 | ✅ | `Metrics.dump` 排他创建；7 项测试 |
 | A3 | 双窗恢复 | ✅ | 20 份归档 + `RECOVERY_MANIFEST.md`；不可恢复范围已明示 |
 | A4 | Harness B=static/D=auto | ✅ | `ARM_SPECS`、`policy_ok`、15 项测试 |
