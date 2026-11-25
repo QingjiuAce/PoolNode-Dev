@@ -9,7 +9,7 @@ import sys
 import time
 
 from . import permissions, validator
-from .origin import DEFAULT_ORIGIN, resolve_origin
+from .origin import DEFAULT_ORIGIN, normalize_origin, resolve_origin
 from .range_transport import Metrics, download
 
 MAX_BYTES = 20 * 1024 * 1024  # v1 product limit, independent of server config
@@ -17,6 +17,7 @@ MAX_BYTES = 20 * 1024 * 1024  # v1 product limit, independent of server config
 
 def select(assets_path: pathlib.Path, asset_id: str,
            origin: str = DEFAULT_ORIGIN) -> tuple[str, str, int | None]:
+    origin = normalize_origin(origin)
     asset = permissions.get_asset(permissions.load_assets(assets_path), asset_id)
     permissions.check_permission(asset)
     rel = validator.validate_relative_path(asset.relative_path)

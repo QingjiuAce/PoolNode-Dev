@@ -66,6 +66,12 @@ def test_fetch_select_uses_custom_origin():
     assert size == 1778514
 
 
+def test_fetch_select_rejects_invalid_origin():
+    with pytest.raises(ValueError):
+        fetch.select(BENCH_ASSETS, 'pool-public-smoke-test',
+                     'http://mirror.example')
+
+
 def test_fetch_cli_passes_origin(monkeypatch):
     captured = {}
 
