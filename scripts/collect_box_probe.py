@@ -10,6 +10,9 @@ Contract (v0.6 task order TASK-B):
   * Every received payload is verified: remote sha256 == received sha256, and
     every appended line parses as a probe record (ts + arms).
   * Failures append an ERROR line to collect.log and exit non-zero.
+  * The remote target is explicit configuration, never a code default:
+    --host/--user or POOL_CN2_HOST/POOL_CN2_USER; --remote-file overrides the
+    path. Missing configuration exits 2 with a clear message.
 """
 from __future__ import annotations
 
