@@ -16,6 +16,7 @@ log_dir: /srv/pool/var              # 同步操作日志目录（数据盘，公
 records_file: /srv/pool/var/sync-records.jsonl
 
 max_file_size_mb: 20                # 单文件上限（任务书建议初始值）
+guard_system_disk: true             # 仅在专用单盘开发配置中可明确关闭
 min_free_space_mb: 10240            # 数据盘安全余量 10G：低于此值拒绝同步
 allowed_formats: [png, jpeg, gif, webp]   # SVG 明确不支持
 

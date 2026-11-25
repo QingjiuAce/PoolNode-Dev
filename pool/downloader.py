@@ -1,10 +1,8 @@
 """上游 HTTPS 下载与连通性诊断。
 
-硬约束：
-- 证书校验强制开启（系统 CA），绝不关闭；
-- 仅允许白名单域名，重定向逐跳校验；
-- 流式下载，超过大小上限立即中止；
-- 不接受运行时传入的任意 URL（URL 只来自白名单）。
+CLI 从资产白名单选择初始 URL；本模块负责连接与响应，不负责授权或发布。
+传输层独立复核允许的主机和协议，下载的每个重定向也必须通过复核。
+HTTPS 使用系统 CA 验证；只在显式测试配置中允许回环 HTTP。
 """
 
 from __future__ import annotations
@@ -16,7 +14,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import nullcontext
 from pathlib import Path
+from typing import BinaryIO
 
 from .config import UpstreamConfig
 
@@ -119,10 +119,15 @@ def _build_opener(cfg: UpstreamConfig) -> urllib.request.OpenerDirector:
     )
 
 
-def check_upstream(source_url: str, cfg: UpstreamConfig) -> dict:
-    """上游连通性诊断。只读取样，不落盘。
+def _is_rejected_http_status(status: int) -> bool:
+    return status in (403, 404, 410, 429) or 500 <= status < 600
 
-    返回分阶段诊断结果；失败时抛出对应类别的 UpstreamError。
+
+def check_upstream(source_url: str, cfg: UpstreamConfig) -> dict:
+    """分阶段诊断连接；只取样，不落盘或跟随 HTTP 重定向。
+
+    返回 DNS、TCP、TLS、HEAD 和 GET 的诊断字典。已分类的网络失败
+    抛出对应的 UpstreamError；HEAD 失败则留在诊断结果中。
     """
     u = _url_allowed(source_url, cfg)
     host = u.hostname or ""
@@ -203,7 +208,7 @@ def check_upstream(source_url: str, cfg: UpstreamConfig) -> dict:
     result["http"] = {"status": status, "reason": resp.reason,
                       "content_type": resp.getheader("Content-Type"),
                       "content_length": resp.getheader("Content-Length")}
-    if status in (403, 404, 410, 429) or 500 <= status < 600:
+    if _is_rejected_http_status(status):
         conn.close()
         raise HttpStatusFail(status, f"上游返回 HTTP {status} {resp.reason}")
 
@@ -238,13 +243,9 @@ def check_upstream(source_url: str, cfg: UpstreamConfig) -> dict:
     return result
 
 
-def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path,
-                     max_size: int) -> tuple[Path, str, int]:
-    """流式下载到 dest（临时文件，由调用方保证不在公开目录）。
-
-    返回 (dest, content_type, bytes_written)。超限抛 SizeLimitExceeded，
-    由调用方负责清理临时文件。
-    """
+def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path | BinaryIO,
+                     max_size: int) -> tuple[Path | BinaryIO, str, int]:
+    """流式下载到暂存路径或由调用方持有的已打开文件。"""
     _url_allowed(source_url, cfg)
     req = urllib.request.Request(source_url, headers={"User-Agent": "pool-poc/0.1 (+sync)"})
     opener = _build_opener(cfg)
@@ -261,7 +262,7 @@ def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path,
 
     with resp:
         status = resp.status
-        if status in (403, 404, 410, 429) or 500 <= status < 600:
+        if _is_rejected_http_status(status):
             raise HttpStatusFail(status, f"上游返回 HTTP {status}")
         content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
         content_length = resp.headers.get("Content-Length")
@@ -272,7 +273,7 @@ def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path,
 
         written = 0
         try:
-            with open(dest, "wb") as f:
+            with (open(dest, "wb") if isinstance(dest, Path) else nullcontext(dest)) as f:
                 while True:
                     chunk = resp.read(CHUNK_SIZE)
                     if not chunk:
@@ -284,10 +285,11 @@ def download_to_file(source_url: str, cfg: UpstreamConfig, dest: Path,
                         )
                     f.write(chunk)
         except (socket.timeout, TimeoutError) as e:
-            dest.unlink(missing_ok=True)
+            if isinstance(dest, Path):
+                dest.unlink(missing_ok=True)
             raise TimeoutFail(f"下载中途超时（已写 {written}）") from e
         except Exception:
-            # 任何失败都不得留下部分写入的临时文件
-            dest.unlink(missing_ok=True)
+            if isinstance(dest, Path):
+                dest.unlink(missing_ok=True)
             raise
     return dest, content_type, written

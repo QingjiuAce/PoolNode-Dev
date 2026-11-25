@@ -11,6 +11,7 @@ from __future__ import annotations
 import dataclasses
 import pathlib
 import re
+from typing import Any
 from urllib.parse import urlparse
 
 import yaml
@@ -48,7 +49,8 @@ class Asset:
 ASSET_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 
 
-def _parse_asset(raw: dict, index: int) -> Asset:
+def _parse_asset(raw: dict[str, Any], index: int) -> Asset:
+    """将单条配置转成资产对象；实际同步另行判定授权与来源。"""
     where = f"assets[{index}]"
     asset_id = str(raw.get("asset_id", "")).strip()
     if not ASSET_ID_RE.match(asset_id):
@@ -120,16 +122,18 @@ def load_assets(path: str | pathlib.Path) -> list[Asset]:
 
 
 def get_asset(assets: list[Asset], asset_id: str) -> Asset:
-    for a in assets:
-        if a.asset_id == asset_id:
-            return a
+    """按资产 ID 查找白名单条目；找不到时立即拒绝。"""
+    for asset in assets:
+        if asset.asset_id == asset_id:
+            return asset
     raise PermissionError(
         "NO_SUCH_ASSET", f"资产 {asset_id!r} 不在白名单中，拒绝任何操作"
     )
 
 
 def check_permission(asset: Asset) -> None:
-    """授权关：approved + 非空证据。pending/denied/无证据一律拒绝。"""
+    """检查从白名单加载的状态及授权证据；不把待审、拒绝或无证据视为许可。"""
+    # 待审与拒绝用不同原因码，保留授权决定的诊断信息。
     if asset.permission_status == "pending":
         raise PermissionError(
             "STATUS_PENDING",
@@ -149,11 +153,11 @@ def check_permission(asset: Asset) -> None:
 
 def validate_source_url(asset: Asset, allowed_hosts: tuple[str, ...],
                         allow_loopback_http: bool = False) -> urlparse.ParseResult:
-    """上游 URL 关：
-    1. scheme 必须是 https（回环测试配置除外）；
-    2. 主机必须在域名白名单内（精确匹配，防子域欺骗）；
-    3. 不允许携带 query/fragment/userinfo/端口；
-    4. URL 路径必须以 relative_path 结尾（保证白名单路径与下载对象一致）。
+    """在下载前核对来源主机及资产路径。
+
+    主机名必须精确命中白名单，不能仅凭域名后缀放行。生产环境要求
+    HTTPS 且只接受默认端口；测试配置可对回环主机放宽 scheme 检查。
+    拒绝非空的 query、fragment 和用户信息；路径后缀须与 relative_path 对应。
     """
     u = urlparse(asset.source_url)
     host = (u.hostname or "").lower()
