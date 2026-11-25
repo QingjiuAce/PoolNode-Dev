@@ -1,0 +1,44 @@
+* 98a4e0a (investigate/v05-chunk-queue) test(cmin): pair C_MIN variants back-to-back with randomized A/B order
+* 1d61b86 investigate(v05): chunk-count override + queue telemetry + A/B/C matrix
+* 6095983 test(tooling): per-segment span/start telemetry for probe arms
+* 1e38122 (HEAD -> feature/v0.6-alpha) data(2026-11-25): closeout archive — 326 arms, 326/326 SHA
+* 4fe0daf docs(rc1): healthy-window acceptance report (90/90 SHA)
+* 1768d90 test(rc1): harness arm-label fix + auto-mapping test + RC healthy-window data
+* b27e8d6 (feature/peak-probe-tooling) docs: V05 audit T1-T5 results + V06 design revision (8 review items)
+* 12f01bb feat(exp): C_MIN experiment harness + healthy-window results
+* 5bd92a4 feat(tooling): verified periodic CN2 probe collector
+* be489a3 fix(v0.5): merge-gate T1-T5 support fixes (cancel API, setup errors, retry count)
+* 9167de1 docs(v0.6): baseline audit, adaptive-scheduler design, data archive index
+* be52474 data: archive CN2 box 27-round three-arm probe records
+* e1847f3 feat(probe): --slots sampling-hour whitelist
+* 1a9c825 (origin/feature/peak-probe-tooling) docs: PoolNode README refresh + station proposal drafts + demo URL list
+* a48331f data: 48h timecurve + 27-round three-arm probe campaign records
+* 47952eb feat(probe): peak_probe measurement tool (single/w16/w32, SHA per arm)
+| * 0376444 (tag: v0.5.0-rc.1, release/v0.5) docs(review): note that v0.5.0-rc.1 tag commit was re-tested (102 passed)
+| | *   75e65b1 (dev) merge: v0.5 release candidate into dev (integration only)
+| | |\  
+| | |/  
+| |/|   
+| * | 9b53e7c docs(review): correct test count to actual HEAD (102 passed / 2 skipped)
+| * | 36c45b7 review(v0.5): comprehensive code review report + doc reference fix + auto-resolution test
+| * | 404cb33 docs(release): v0.5 release candidate notes + server/client version decoupling policy
+| * | 884db00 fix(v0.5): merge-gate T1-T5 support fixes (cancel API, setup errors, retry count)
+|/ /  
+* | 6b2338f (feature/v0.4-beta) docs: v0.5 update report (correction + scheduler + release record)
+* | 68e66a0 (origin/feature/v0.4-beta) feat(v0.5): tuned chunk policy + auto scheduler + paired-benchmark evidence
+* | 376a028 feat(v0.5): dynamic chunk-queue scheduler + phase-split metrics (opt-in)
+* | a9d58ae docs: §3.7 aggregate-throughput correction (per-flow amortization misread as aggregate; cliff conclusion retracted)
+* | 635fa99 docs+data: v0.4-beta evening peak benchmark matrix backfill (50 runs)
+* | 4e3dcd5 feat(v0.4-beta): peak-hour segmented download client (phase A1)
+* | 147dd40 (origin/main, origin/HEAD, main) report: image download data compilation + optimization plan (evening peak root cause, per-flow shaping proof, solution matrix)
+* |   98923cd Merge Pool V0.2 production history (stable release) into main
+|\ \  
+* | | 968d1f1 Initial commit
+ / /  
+| * 70411f6 (origin/dev, fix/guard-system-disk-race-hardening) security: harden guarded filesystem writes and audit integrity
+| * 62b0cb8 (fix/guard-system-disk-default) ops: sshd host-key loss incident (2026-11-21) — documented fix + self-heal override
+| * 7ac2621 security: enable system disk guard by default
+| * fe03d54 (maintenance/code-quality-v01) refactor: clarify Pool code and document behavior boundaries
+|/  
+* 63c0ef8 (master) V0.2: public deployment on https://dl.bszx.site — full stages 0-7
+* b6f556e V0.1 baseline: internal PoC (sync/verify/remove/check-upstream, 77 tests, loopback nginx vhost)

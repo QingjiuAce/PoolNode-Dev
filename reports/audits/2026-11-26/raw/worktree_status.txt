@@ -1,0 +1,22 @@
+ M reports/benchmarks/cmin-experiment/runs.jsonl
+ M reports/benchmarks/v05-rc1/metrics/1.jsonl
+ M reports/benchmarks/v05-rc1/metrics/10.jsonl
+ M reports/benchmarks/v05-rc1/metrics/2.jsonl
+ M reports/benchmarks/v05-rc1/metrics/3.jsonl
+ M reports/benchmarks/v05-rc1/metrics/4.jsonl
+ M reports/benchmarks/v05-rc1/metrics/5.jsonl
+ M reports/benchmarks/v05-rc1/metrics/6.jsonl
+ M reports/benchmarks/v05-rc1/metrics/7.jsonl
+ M reports/benchmarks/v05-rc1/metrics/8.jsonl
+ M reports/benchmarks/v05-rc1/metrics/9.jsonl
+?? reports/audits/2026-11-26/raw/branches.txt
+?? reports/audits/2026-11-26/raw/git_status.txt
+?? reports/audits/2026-11-26/raw/graph.txt
+?? reports/audits/2026-11-26/raw/remotes.txt
+?? reports/audits/2026-11-26/raw/tag_rc1.txt
+?? reports/audits/2026-11-26/raw/tags.txt
+?? reports/audits/2026-11-26/raw/worktree_staged.diff
+?? reports/audits/2026-11-26/raw/worktree_staged_stat.txt
+?? reports/audits/2026-11-26/raw/worktree_status.txt
+?? reports/audits/2026-11-26/raw/worktree_unstaged.diff
+?? reports/audits/2026-11-26/raw/worktree_unstaged_stat.txt

@@ -1,0 +1,25 @@
+## dev 独有（alpha 缺失）
+fe03d54ecc1be71c2450a4281c207ea0a9dc3ef1 2026-11-21 08:16:39 +0800 refactor: clarify Pool code and document behavior boundaries
+7ac2621ff11bdcd44d9e24dc46b2eeed0d238f25 2026-11-21 08:52:21 +0800 security: enable system disk guard by default
+62b0cb890c4c19ae72a1467e36789d464513f726 2026-11-21 08:52:42 +0800 ops: sshd host-key loss incident (2026-11-21) — documented fix + self-heal override
+70411f6ebe74931b6de52e4036d338b353cf230b 2026-11-21 09:41:04 +0800 security: harden guarded filesystem writes and audit integrity
+884db003f1ede4fe2d443d62d1ceed0e4c3539d0 2026-11-25 01:28:58 +0800 fix(v0.5): merge-gate T1-T5 support fixes (cancel API, setup errors, retry count)
+404cb339717a02826e4de94a619065ed5c9dfaee 2026-11-25 01:30:11 +0800 docs(release): v0.5 release candidate notes + server/client version decoupling policy
+36c45b706dd4cf2ecaab0acde4d98c60a3cf7b88 2026-11-25 01:48:04 +0800 review(v0.5): comprehensive code review report + doc reference fix + auto-resolution test
+9b53e7cd95dc275d5c5c70f3be96e9f44a431487 2026-11-25 01:52:45 +0800 docs(review): correct test count to actual HEAD (102 passed / 2 skipped)
+75e65b121550cc2b7e4a53eee0bd8245cf4b3cc7 2026-11-25 01:52:50 +0800 merge: v0.5 release candidate into dev (integration only)
+
+## alpha 独有
+47952eb3c9d12d01a4a47088a22cacc11f598914 2026-11-25 00:58:16 +0800 feat(probe): peak_probe measurement tool (single/w16/w32, SHA per arm)
+a48331fe92120c4c8b441be173ad821038163ff8 2026-11-25 00:58:20 +0800 data: 48h timecurve + 27-round three-arm probe campaign records
+1a9c825774701ead6cf5e0caabd959f9d2cc6ab0 2026-11-25 00:58:20 +0800 docs: PoolNode README refresh + station proposal drafts + demo URL list
+e1847f332f52c078c3570eccf5bebcbd536a9b86 2026-11-25 01:03:53 +0800 feat(probe): --slots sampling-hour whitelist
+be524741cfc70490bc2999a936eb58527bd050d0 2026-11-25 01:03:54 +0800 data: archive CN2 box 27-round three-arm probe records
+9167de196e58c93a86f3af7c43bbdbc27f5f6567 2026-11-25 01:03:54 +0800 docs(v0.6): baseline audit, adaptive-scheduler design, data archive index
+be489a3913ca1b0963e2fc3360fa3359115f1080 2026-11-25 01:13:31 +0800 fix(v0.5): merge-gate T1-T5 support fixes (cancel API, setup errors, retry count)
+5bd92a48a722fb0dd076e0812e455a64ac579d4d 2026-11-25 01:13:31 +0800 feat(tooling): verified periodic CN2 probe collector
+12f01bba74299d531dd726685f1cd49454c847ca 2026-11-25 01:13:31 +0800 feat(exp): C_MIN experiment harness + healthy-window results
+b27e8d64db2c9c8be4299141e4ef2e2bbeb8c150 2026-11-25 01:13:32 +0800 docs: V05 audit T1-T5 results + V06 design revision (8 review items)
+1768d9000cf604ee36496be774efff9d521eaa0e 2026-11-25 02:01:15 +0800 test(rc1): harness arm-label fix + auto-mapping test + RC healthy-window data
+4fe0daf27038f4c953df69db3a9ed27556b59030 2026-11-25 02:01:35 +0800 docs(rc1): healthy-window acceptance report (90/90 SHA)
+1e38122a6e1674567d5e54fea1c5310fc6c0903b 2026-11-26 00:01:41 +0800 data(2026-11-25): closeout archive — 326 arms, 326/326 SHA

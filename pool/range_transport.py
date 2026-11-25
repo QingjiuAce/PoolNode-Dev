@@ -12,6 +12,7 @@ import os
 import queue
 from pathlib import Path
 import re
+import secrets
 import socket
 import ssl
 import tempfile
@@ -43,15 +44,27 @@ class Cancelled(RuntimeError):
     """External cancellation requested: staging is discarded, no fallback."""
 
 
+def _new_run_id():
+    """One identifiable id per Metrics instance (experiment run)."""
+    return time.strftime('%Y%m%dT%H%M%S') + '-' + secrets.token_hex(4)
+
+
 class Metrics:
     """Thread-safe collector of per-request diagnostics. Opt-in only: callers
     that never construct one execute the exact v0.4 code path. Records carry
-    no headers, tokens, or addresses — only timings, sizes, spans, statuses."""
+    no headers, tokens, or addresses — only timings, sizes, spans, statuses.
 
-    def __init__(self):
+    Each instance owns a run_id that is copied into every record, and dump()
+    creates the target exclusively: an existing file is a hard error, never
+    silently overwritten. Lines are written to a same-directory temporary file,
+    fsynced, then hard-linked into place, so a failed or partial write never
+    leaves a plausible-looking metrics file."""
+
+    def __init__(self, run_id=None):
         self._lock = threading.Lock()
         self.records = []
         self._conn_seq = 0
+        self.run_id = run_id or _new_run_id()
 
     def next_conn(self):
         with self._lock:
@@ -60,12 +73,35 @@ class Metrics:
 
     def add(self, rec):
         with self._lock:
-            self.records.append(rec)
+            record = dict(rec)
+            record.setdefault('run_id', self.run_id)
+            self.records.append(record)
 
     def dump(self, path):
-        with open(path, 'w', encoding='utf-8') as f:
-            for rec in self.records:
-                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+        path = Path(path)
+        tmp = path.with_name(
+            f'.{path.name}.{os.getpid()}.{secrets.token_hex(6)}.tmp')
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as f:
+                fd = None
+                for rec in self.records:
+                    f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+                f.flush()
+                os.fsync(f.fileno())
+            try:
+                os.link(tmp, path)
+            except FileExistsError:
+                raise FileExistsError(
+                    f'metrics 文件已存在，拒绝覆盖: {path}') from None
+        finally:
+            if fd is not None:
+                os.close(fd)
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+        return path
 
 
 class _TimedConnection(http.client.HTTPSConnection):

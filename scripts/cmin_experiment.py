@@ -6,7 +6,10 @@ is n = min(workers, floor(size / C_MIN)) — so C_MIN actually constrains the
 achievable chunk count (128 KiB caps the 1.7 MiB file at 13 chunks).
 
 Reuses peak_probe's transport, verification and per-segment timing primitives.
-Arms run sequentially; order alternates every rep. One JSONL record per arm.
+Each arm is a pair: both C_MIN values run back-to-back (randomized A/B order)
+inside the same worker group, so no other download can interleave within a
+pair. Worker-group order is shuffled per rep. One JSONL record per arm, each
+carrying a run_id and a unique arm_id.
 
 Usage:
   python scripts/cmin_experiment.py --reps 5                 # healthy run now
@@ -16,6 +19,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
+import secrets
 import shutil
 import ssl
 import sys
@@ -38,6 +43,29 @@ def plan(size: int, workers: int, cmin: int) -> list:
 
 def slot_kind(now: datetime) -> str:
     return 'peak' if now.hour in (20, 21, 22, 23) else 'regular'
+
+
+def new_run_id() -> str:
+    return time.strftime('%Y%m%dT%H%M%S') + '-' + secrets.token_hex(4)
+
+
+def arm_id(run_id: str, rep: int, name: str, cmin: int) -> str:
+    """Unique within one experiment run: rep + worker group + C_MIN."""
+    return f'{run_id}:r{rep}:{name}:c{cmin}'
+
+
+def build_order(cmins, arms, reps, rng=None):
+    """Return [(rep, cmin, workers, name)] with C_MIN variants back-to-back."""
+    rng = rng or random
+    order = []
+    for rep in range(reps):
+        groups = list(arms)
+        rng.shuffle(groups)
+        for workers, name in groups:
+            pair = list(cmins)
+            rng.shuffle(pair)
+            order.extend((rep, cmin, workers, name) for cmin in pair)
+    return order
 
 
 def already_ran(path: Path, hour_key: str) -> bool:
@@ -79,39 +107,37 @@ def main(argv=None) -> int:
     ctx = ssl.create_default_context()
     ctx.set_alpn_protocols(['http/1.1'])
     tmpdir = tempfile.mkdtemp(prefix='cmin-')
+    run_id = new_run_id()
     rc = 0
     try:
-        for rep in range(args.reps):
-            order = [(c, a) for c in cmins for a in ARMS]
-            if rep % 2:
-                order = order[::-1]
-            for cmin, (workers, name) in order:
-                spans = plan(SIZE, workers, cmin)
-                rec = {'ts': now.isoformat(timespec='seconds'),
-                       'epoch': round(time.time(), 3),
-                       'slot_kind': slot_kind(now), 'rep': rep,
-                       'cmin': cmin, 'workers': workers, 'arm': name,
-                       'chunks': len(spans),
-                       'chunk_bytes': SIZE // len(spans),
-                       'asset': 'smoke', 'size': SIZE}
-                try:
-                    if name == 'single':
-                        arm = pp.run_single(ctx, PATH, SIZE, DIGEST, tmpdir, args.timeout)
-                    else:
-                        arm = pp.run_ranges(ctx, PATH, SIZE, DIGEST, len(spans), tmpdir,
-                                            args.timeout)
-                    rec.update(arm)
-                    rec['arm'] = name  # run_ranges labels itself w<chunks>; keep the arm id
-                    rec['requests'] = len(spans) + (0 if name == 'single' else 1)
-                except Exception as exc:  # noqa: BLE001
-                    rec.update({'sha_ok': False, 'status': 'error', 'mbps': None,
-                                'error': f'{exc.__class__.__name__}: {exc}'[:200]})
-                    rc = 1
-                with open(out, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps(rec, ensure_ascii=False) + '\n')
-                print(f"rep{rep} cmin={cmin} {name}: chunks={rec['chunks']} "
-                      f"chunk={rec['chunk_bytes']}B mbps={rec.get('mbps')} "
-                      f"sha={rec.get('sha_ok')}", flush=True)
+        for rep, cmin, workers, name in build_order(cmins, ARMS, args.reps):
+            spans = plan(SIZE, workers, cmin)
+            rec = {'ts': now.isoformat(timespec='seconds'),
+                   'epoch': round(time.time(), 3), 'run_id': run_id,
+                   'arm_id': arm_id(run_id, rep, name, cmin),
+                   'slot_kind': slot_kind(now), 'rep': rep,
+                   'cmin': cmin, 'workers': workers, 'arm': name,
+                   'chunks': len(spans),
+                   'chunk_bytes': SIZE // len(spans),
+                   'asset': 'smoke', 'size': SIZE}
+            try:
+                if name == 'single':
+                    arm = pp.run_single(ctx, PATH, SIZE, DIGEST, tmpdir, args.timeout)
+                else:
+                    arm = pp.run_ranges(ctx, PATH, SIZE, DIGEST, len(spans), tmpdir,
+                                        args.timeout)
+                rec.update(arm)
+                rec['arm'] = name  # run_ranges labels itself w<chunks>; keep the arm id
+                rec['requests'] = len(spans) + (0 if name == 'single' else 1)
+            except Exception as exc:  # noqa: BLE001
+                rec.update({'sha_ok': False, 'status': 'error', 'mbps': None,
+                            'error': f'{exc.__class__.__name__}: {exc}'[:200]})
+                rc = 1
+            with open(out, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+            print(f"rep{rep} cmin={cmin} {name}: chunks={rec['chunks']} "
+                  f"chunk={rec['chunk_bytes']}B mbps={rec.get('mbps')} "
+                  f"sha={rec.get('sha_ok')}", flush=True)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
     return rc

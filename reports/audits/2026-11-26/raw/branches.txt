@@ -1,0 +1,16 @@
+  dev                                       75e65b1 [origin/dev: ahead 14] merge: v0.5 release candidate into dev (integration only)
+  feature/peak-probe-tooling                b27e8d6 [origin/feature/peak-probe-tooling: ahead 7] docs: V05 audit T1-T5 results + V06 design revision (8 review items)
+  feature/v0.4-beta                         6b2338f [origin/feature/v0.4-beta: ahead 1] docs: v0.5 update report (correction + scheduler + release record)
+* feature/v0.6-alpha                        1e38122 data(2026-11-25): closeout archive — 326 arms, 326/326 SHA
+  fix/guard-system-disk-default             62b0cb8 ops: sshd host-key loss incident (2026-11-21) — documented fix + self-heal override
+  fix/guard-system-disk-race-hardening      70411f6 security: harden guarded filesystem writes and audit integrity
+  investigate/v05-chunk-queue               98a4e0a test(cmin): pair C_MIN variants back-to-back with randomized A/B order
+  main                                      147dd40 [origin/main] report: image download data compilation + optimization plan (evening peak root cause, per-flow shaping proof, solution matrix)
+  maintenance/code-quality-v01              fe03d54 refactor: clarify Pool code and document behavior boundaries
+  master                                    63c0ef8 V0.2: public deployment on https://dl.bszx.site — full stages 0-7
+  release/v0.5                              0376444 docs(review): note that v0.5.0-rc.1 tag commit was re-tested (102 passed)
+  remotes/origin/HEAD                       -> origin/main
+  remotes/origin/dev                        70411f6 security: harden guarded filesystem writes and audit integrity
+  remotes/origin/feature/peak-probe-tooling 1a9c825 docs: PoolNode README refresh + station proposal drafts + demo URL list
+  remotes/origin/feature/v0.4-beta          68e66a0 feat(v0.5): tuned chunk policy + auto scheduler + paired-benchmark evidence
+  remotes/origin/main                       147dd40 report: image download data compilation + optimization plan (evening peak root cause, per-flow shaping proof, solution matrix)

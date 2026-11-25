@@ -37,9 +37,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--scheduler', choices=('static', 'dynamic', 'auto'), default='auto',
                         help='auto（默认）=≥4MiB 用 dynamic 任务队列、小文件保持 static 固定等分；'
                              'static=v0.4 行为；dynamic=强制任务队列')
+    parser.add_argument('--run-id',
+                        help='实验运行 ID（默认自动生成）；写入本次运行的每条 metrics 记录')
     args = parser.parse_args(argv)
-    metrics = Metrics() if args.metrics is not None else None
+    metrics = Metrics(run_id=args.run_id) if args.metrics is not None else None
+    dumped = False
     try:
+        if args.metrics is not None and args.metrics.exists():
+            # Fail before any network or filesystem work: an existing metrics
+            # file is a different run, and silently replacing it destroys the
+            # only copy of that run's diagnostics.
+            raise FileExistsError(f'metrics 文件已存在，拒绝覆盖: {args.metrics}')
         url, digest, registered = select(args.assets, args.asset_id)
         if registered is not None and args.size is not None and registered != args.size:
             raise ValueError('--size 与登记字节数不一致')
@@ -64,13 +72,17 @@ def main(argv: list[str] | None = None) -> int:
                          'scheduler': scheduler, 'size': size,
                          'workers': workers, 'error': None})
             metrics.dump(args.metrics)
+            dumped = True
         return 0
     except BaseException as exc:
-        if metrics is not None:
+        if metrics is not None and not dumped:
             metrics.add({'kind': 'download', 'ts': round(time.time(), 3),
                          'wall_ms': None, 'mode': None, 'size': None,
                          'workers': None, 'error': exc.__class__.__name__})
-            metrics.dump(args.metrics)
+            try:
+                metrics.dump(args.metrics)
+            except FileExistsError as dump_exc:
+                print(f'metrics 未写入：{dump_exc}', file=sys.stderr)
         if isinstance(exc, (permissions.AssetConfigError, permissions.PermissionError,
                             validator.PathError, ValueError, OSError, RuntimeError,
                             http.client.HTTPException)):

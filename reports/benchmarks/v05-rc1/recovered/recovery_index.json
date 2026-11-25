@@ -1,0 +1,594 @@
+{
+  "sources": {
+    "health_window": {
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "files": 10
+    },
+    "event_window": {
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "files": 10
+    }
+  },
+  "files": [
+    {
+      "file": "1.jsonl",
+      "bytes": 9043,
+      "sha256": "49c07d375cd4cc0dc14446e2d1a7adde5f0ed3d450b2b4db914acaf17cab837a",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543199.507,
+      "last_ts": 1795543200.291,
+      "first_local": "2026-11-25T01:59:59.507000+08:00",
+      "last_local": "2026-11-25T02:00:00.291000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543200.291,
+        "wall_ms": 802.15,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "2.jsonl",
+      "bytes": 9042,
+      "sha256": "e465a643c4959ff016c48aaac9b7c032d91c4346b3ae1d40a696e942b8cd0102",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543201.975,
+      "last_ts": 1795543202.743,
+      "first_local": "2026-11-25T02:00:01.975000+08:00",
+      "last_local": "2026-11-25T02:00:02.743000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543202.743,
+        "wall_ms": 786.08,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "3.jsonl",
+      "bytes": 9030,
+      "sha256": "bdc98bb45947882a4d232c17b96ba6e901a4070750e4ae79d05e32e24bed5d1d",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543204.414,
+      "last_ts": 1795543205.227,
+      "first_local": "2026-11-25T02:00:04.414000+08:00",
+      "last_local": "2026-11-25T02:00:05.227000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543205.227,
+        "wall_ms": 830.89,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "4.jsonl",
+      "bytes": 9032,
+      "sha256": "52ea68fa18e49d194af64d3c7c4fb257f71bd3eb1248c0a4b5019c82f55ebad9",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543206.899,
+      "last_ts": 1795543207.792,
+      "first_local": "2026-11-25T02:00:06.899000+08:00",
+      "last_local": "2026-11-25T02:00:07.792000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543207.792,
+        "wall_ms": 912.54,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "5.jsonl",
+      "bytes": 9029,
+      "sha256": "35d17087534de2def357a1fb0dc6c8ba04d72777c05fbcf4fff1a24eb7d6a56c",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543209.471,
+      "last_ts": 1795543210.26,
+      "first_local": "2026-11-25T02:00:09.471000+08:00",
+      "last_local": "2026-11-25T02:00:10.260000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543210.26,
+        "wall_ms": 807.49,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "6.jsonl",
+      "bytes": 9028,
+      "sha256": "d8ffe0b280f67f2cfb3b510ae1d0c10285c4eb2651cf5863411c8a924c2df674",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543211.951,
+      "last_ts": 1795543212.793,
+      "first_local": "2026-11-25T02:00:11.951000+08:00",
+      "last_local": "2026-11-25T02:00:12.793000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543212.793,
+        "wall_ms": 860.25,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "7.jsonl",
+      "bytes": 9031,
+      "sha256": "10777fb99672766162f6ef3edaea4f08664d0099bb2aa993f01b87f16f92f95e",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543214.483,
+      "last_ts": 1795543215.301,
+      "first_local": "2026-11-25T02:00:14.483000+08:00",
+      "last_local": "2026-11-25T02:00:15.301000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543215.301,
+        "wall_ms": 838.26,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "8.jsonl",
+      "bytes": 9018,
+      "sha256": "f87a3a6704bbbf70da3f3b17c1d83f44990d6bec792da9d9043444356ee77ce8",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543216.981,
+      "last_ts": 1795543217.761,
+      "first_local": "2026-11-25T02:00:16.981000+08:00",
+      "last_local": "2026-11-25T02:00:17.761000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543217.761,
+        "wall_ms": 799.29,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "9.jsonl",
+      "bytes": 9026,
+      "sha256": "bbbbbdb7282efbebecf4c70363f4ed733de0fbf9b9a54cdd32882691f271a642",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543219.453,
+      "last_ts": 1795543220.311,
+      "first_local": "2026-11-25T02:00:19.453000+08:00",
+      "last_local": "2026-11-25T02:00:20.311000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543220.311,
+        "wall_ms": 889.3,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "10.jsonl",
+      "bytes": 9019,
+      "sha256": "576c28dc816c154732978d0a6a3b650e7ecd542bb4dac73367d76da44f2f9e27",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795543221.997,
+      "last_ts": 1795543222.804,
+      "first_local": "2026-11-25T02:00:21.997000+08:00",
+      "last_local": "2026-11-25T02:00:22.804000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795543222.804,
+        "wall_ms": 827.86,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "health_window",
+      "source": "git HEAD:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "1.jsonl",
+      "bytes": 9083,
+      "sha256": "b1c906b5d9569abe562cbf6a0f8632207e603c4204cb00b1f4636a578341c4bd",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620302.974,
+      "last_ts": 1795620311.081,
+      "first_local": "2026-11-25T23:25:02.974000+08:00",
+      "last_local": "2026-11-25T23:25:11.081000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620311.081,
+        "wall_ms": 8124.86,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "2.jsonl",
+      "bytes": 9079,
+      "sha256": "a088afefdc6cdeb49c1d7a652c75b92179fceec503f87880a74711215be93902",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620313.276,
+      "last_ts": 1795620319.378,
+      "first_local": "2026-11-25T23:25:13.276000+08:00",
+      "last_local": "2026-11-25T23:25:19.378000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620319.378,
+        "wall_ms": 6119.6,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "3.jsonl",
+      "bytes": 9085,
+      "sha256": "2e035a09ccb57730c6af57b433bfe2f7315141a3ca5343288a64610bdd34273d",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620321.59,
+      "last_ts": 1795620329.778,
+      "first_local": "2026-11-25T23:25:21.590000+08:00",
+      "last_local": "2026-11-25T23:25:29.778000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620329.778,
+        "wall_ms": 8217.09,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "4.jsonl",
+      "bytes": 9101,
+      "sha256": "c40ffcf7266e67ea48e240b485c8386860db063f7a03af9b03a0971fb146d377",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620331.989,
+      "last_ts": 1795620340.722,
+      "first_local": "2026-11-25T23:25:31.989000+08:00",
+      "last_local": "2026-11-25T23:25:40.722000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620340.722,
+        "wall_ms": 8752.02,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "5.jsonl",
+      "bytes": 9083,
+      "sha256": "57d48712430b38590b6e5ae9371400c44db0f32fb94fb28646dda8560dba675b",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620342.899,
+      "last_ts": 1795620351.638,
+      "first_local": "2026-11-25T23:25:42.899000+08:00",
+      "last_local": "2026-11-25T23:25:51.638000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620351.638,
+        "wall_ms": 8758.97,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "6.jsonl",
+      "bytes": 9089,
+      "sha256": "dcb2e66404e1b1781ca251034fa171f08b8032043580dc788abdff62f98c28da",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620353.81,
+      "last_ts": 1795620363.988,
+      "first_local": "2026-11-25T23:25:53.810000+08:00",
+      "last_local": "2026-11-25T23:26:03.988000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620363.988,
+        "wall_ms": 10195.49,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "7.jsonl",
+      "bytes": 9100,
+      "sha256": "6c7802e870477f1bcac67806a96b34e637b8bf9d6e05244f711255c1a2632d35",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620366.152,
+      "last_ts": 1795620377.24,
+      "first_local": "2026-11-25T23:26:06.152000+08:00",
+      "last_local": "2026-11-25T23:26:17.240000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620377.24,
+        "wall_ms": 11104.63,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "8.jsonl",
+      "bytes": 9084,
+      "sha256": "872e3a58f0c108b584913689bf9c9901413018d764efc6f1f913d12bca4e05c4",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620379.422,
+      "last_ts": 1795620390.532,
+      "first_local": "2026-11-25T23:26:19.422000+08:00",
+      "last_local": "2026-11-25T23:26:30.532000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620390.532,
+        "wall_ms": 11130.38,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "9.jsonl",
+      "bytes": 9092,
+      "sha256": "503b70ef5c2e1de480d262c745d73848168be66f330f1495932dbdb96c1e0f94",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620392.718,
+      "last_ts": 1795620402.66,
+      "first_local": "2026-11-25T23:26:32.718000+08:00",
+      "last_local": "2026-11-25T23:26:42.660000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620402.66,
+        "wall_ms": 9960.58,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    },
+    {
+      "file": "10.jsonl",
+      "bytes": 9092,
+      "sha256": "e6e7d3dc7c290ac640cb16d05c73d4d5f205da898166467d7991ca2f8e777d6f",
+      "lines": 24,
+      "kinds": {
+        "request": 22,
+        "chunks": 1,
+        "download": 1
+      },
+      "run_ids": [],
+      "first_ts": 1795620404.852,
+      "last_ts": 1795620414.9,
+      "first_local": "2026-11-25T23:26:44.852000+08:00",
+      "last_local": "2026-11-25T23:26:54.900000+08:00",
+      "download": {
+        "kind": "download",
+        "ts": 1795620414.9,
+        "wall_ms": 10066.96,
+        "mode": "range",
+        "scheduler": "dynamic",
+        "size": 5403720,
+        "workers": 16,
+        "error": null
+      },
+      "window": "event_window",
+      "source": "working tree:reports/benchmarks/v05-rc1/metrics",
+      "archive_action": "created"
+    }
+  ]
+}

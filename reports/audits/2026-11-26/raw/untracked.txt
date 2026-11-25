@@ -1,0 +1,13 @@
+reports/audits/2026-11-26/raw/branch_unique_commits.txt
+reports/audits/2026-11-26/raw/branches.txt
+reports/audits/2026-11-26/raw/git_status.txt
+reports/audits/2026-11-26/raw/graph.txt
+reports/audits/2026-11-26/raw/remotes.txt
+reports/audits/2026-11-26/raw/tag_rc1.txt
+reports/audits/2026-11-26/raw/tags.txt
+reports/audits/2026-11-26/raw/untracked.txt
+reports/audits/2026-11-26/raw/worktree_staged.diff
+reports/audits/2026-11-26/raw/worktree_staged_stat.txt
+reports/audits/2026-11-26/raw/worktree_status.txt
+reports/audits/2026-11-26/raw/worktree_unstaged.diff
+reports/audits/2026-11-26/raw/worktree_unstaged_stat.txt
