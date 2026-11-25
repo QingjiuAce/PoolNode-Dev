@@ -1,0 +1,26 @@
+[
+ {
+  "path": "reports/benchmarks/v06-monitoring/local-probe.jsonl",
+  "bytes": 7557,
+  "lines": 6,
+  "sha256": "a612f94acf40263c35c26c1a9c5a43c98b841d850402a702bf49c21bc425652d"
+ },
+ {
+  "path": "reports/benchmarks/v06-monitoring/cn2box-probe.jsonl",
+  "bytes": 7756,
+  "lines": 6,
+  "sha256": "bea84808f352c3e2545b1dca8476028155957d9a27a2fdbb616650d8a19fb988"
+ },
+ {
+  "path": "reports/benchmarks/cmin-experiment/runs.jsonl",
+  "bytes": 81050,
+  "lines": 160,
+  "sha256": "6214207a1cc45198805dd783d228eb9eff5749438a9feb4428725098a27457e1"
+ },
+ {
+  "path": "reports/benchmarks/v05-rc1/runs.jsonl",
+  "bytes": 21983,
+  "lines": 130,
+  "sha256": "0dc0828ee553c8b1b19d33c53c6162e3896b6339b945c7fbee949daff4a66882"
+ }
+]
