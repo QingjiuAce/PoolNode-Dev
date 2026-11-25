@@ -1,0 +1,4 @@
+$ python -m compileall -q pool scripts tests
+exit=0
+$ python -m pool --version
+pool-poc 0.6.0.dev1
