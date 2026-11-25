@@ -39,6 +39,8 @@ def main(argv: list[str] | None = None) -> int:
                              'static=v0.4 行为；dynamic=强制任务队列')
     parser.add_argument('--run-id',
                         help='实验运行 ID（默认自动生成）；写入本次运行的每条 metrics 记录')
+    parser.add_argument('--json', action='store_true',
+                        help='stdout 输出单行机器可读 JSON（便于实验 Harness 解析）')
     args = parser.parse_args(argv)
     metrics = Metrics(run_id=args.run_id) if args.metrics is not None else None
     dumped = False
@@ -65,10 +67,18 @@ def main(argv: list[str] | None = None) -> int:
         mode = download(url, size, digest, args.output, workers, metrics,
                         scheduler)
         wall = time.perf_counter() - t0
-        print(f'已校验 SHA256：{digest}；模式：{mode}；输出：{args.output}')
+        result = {'asset_id': args.asset_id, 'sha256': digest, 'mode': mode,
+                  'scheduler': scheduler, 'size': size, 'workers': workers,
+                  'run_id': metrics.run_id if metrics is not None else None,
+                  'output': str(args.output), 'wall_ms': round(wall * 1000, 2),
+                  'error': None}
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(f'已校验 SHA256：{digest}；模式：{mode}；输出：{args.output}')
         if metrics is not None:
             metrics.add({'kind': 'download', 'ts': round(time.time(), 3),
-                         'wall_ms': round(wall * 1000, 2), 'mode': mode,
+                         'wall_ms': result['wall_ms'], 'mode': mode,
                          'scheduler': scheduler, 'size': size,
                          'workers': workers, 'error': None})
             metrics.dump(args.metrics)
@@ -83,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
                 metrics.dump(args.metrics)
             except FileExistsError as dump_exc:
                 print(f'metrics 未写入：{dump_exc}', file=sys.stderr)
+        if args.json:
+            print(json.dumps({'asset_id': args.asset_id, 'error': exc.__class__.__name__,
+                              'detail': str(exc)[:300],
+                              'run_id': metrics.run_id if metrics is not None else None},
+                             ensure_ascii=False))
         if isinstance(exc, (permissions.AssetConfigError, permissions.PermissionError,
                             validator.PathError, ValueError, OSError, RuntimeError,
                             http.client.HTTPException)):
