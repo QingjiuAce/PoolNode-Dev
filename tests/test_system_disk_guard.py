@@ -399,3 +399,16 @@ def test_publish_succeeds_on_independent_device(tmp_path, monkeypatch):
     final = storage.publish(cfg, staging, REL_PATH)
     assert final.read_bytes() == png
     assert not staging.exists()
+
+
+def test_guarded_staging_names_are_unique_per_task(tmp_path, monkeypatch):
+    """Two tasks for the same asset must never share a stage name."""
+    cfg = load_config(_write_guard_config(tmp_path, True))
+    _device_model(monkeypatch, tmp_path / "system-root-marker")
+    names = []
+    for _ in range(2):
+        with storage.guarded_staging(cfg, ASSET_ID) as stage:
+            names.append(stage.name)
+            assert stage.stream.write(b"x") == 1
+    assert len(names) == 2 and names[0] != names[1]
+    assert list(cfg.tmp_dir.iterdir()) == []  # both stages cleaned up

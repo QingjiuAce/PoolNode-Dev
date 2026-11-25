@@ -116,6 +116,46 @@ class TestSourceUrl:
         with pytest.raises(PermissionError):
             validate_source_url(a, cfg_allowed, allow_loopback_http=False)
 
+    def test_host_case_is_normalized(self):
+        url = ("https://RAW.GITHUBUSERCONTENT.COM/lmy414/ai-girl-stickers/"
+               "main/owner-picks/x.png")
+        validate_source_url(_asset(source_url=url), ALLOWED)
+
+    def test_trailing_dot_host_is_rejected_not_silently_equated(self):
+        url = ("https://raw.githubusercontent.com./lmy414/ai-girl-stickers/"
+               "main/owner-picks/x.png")
+        with pytest.raises(PermissionError) as e:
+            validate_source_url(_asset(source_url=url), ALLOWED)
+        assert e.value.reason == "BAD_SOURCE_URL"
+
+    def test_lookalike_host_suffix_rejected(self):
+        url = ("https://raw.githubusercontent.com.trusted.example/"
+               "lmy414/ai-girl-stickers/main/owner-picks/x.png")
+        with pytest.raises(PermissionError) as e:
+            validate_source_url(_asset(source_url=url), ALLOWED)
+        assert e.value.reason == "BAD_SOURCE_URL"
+
+    def test_upstream_path_prefix_is_allowed(self):
+        # Upstream repos may carry a branch/prefix that is not part of the
+        # public Pool path; only the suffix must match relative_path.
+        url = ("https://raw.githubusercontent.com/some/fork/main/"
+               "owner-picks/x.png")
+        validate_source_url(_asset(source_url=url), ALLOWED)
+
+    def test_similar_path_suffix_rejected(self):
+        url = ("https://raw.githubusercontent.com/lmy414/ai-girl-stickers/"
+               "main/evil-owner-picks/x.png")
+        with pytest.raises(PermissionError) as e:
+            validate_source_url(_asset(source_url=url), ALLOWED)
+        assert e.value.reason == "BAD_SOURCE_URL"
+
+    def test_non_default_https_port_rejected(self):
+        url = ("https://raw.githubusercontent.com:8443/lmy414/ai-girl-stickers/"
+               "main/owner-picks/x.png")
+        with pytest.raises(PermissionError) as e:
+            validate_source_url(_asset(source_url=url), ALLOWED)
+        assert e.value.reason == "BAD_SOURCE_URL"
+
 
 class TestAssetsFile:
     def test_duplicate_id_rejected(self, tmp_path):

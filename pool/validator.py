@@ -112,10 +112,6 @@ def sha256_file(path: pathlib.Path | BinaryIO, chunk_size: int = 1024 * 1024) ->
     return digest.hexdigest()
 
 
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def fsync_dir(path: pathlib.Path) -> None:
     """fsync 目录项，保证原子移动后的元数据落盘（Windows 上可能不支持，忽略）。"""
     try:

@@ -6,8 +6,9 @@ venv/
 
 # 本地测试产物
 *.part
-data/
-tmp/
+/data/
+/tmp/
+.review-tmp2/
 
 # 生产配置（只提交 example）
 config/config.yaml

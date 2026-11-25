@@ -14,6 +14,7 @@ import secrets
 import stat
 import sys
 import tempfile
+import threading
 import time
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -360,6 +361,58 @@ def remove_file(cfg: PoolConfig, relative_path: str, *, before_unlink: Callable[
     return target
 
 
+_AUDIT_THREAD_LOCK = threading.Lock()
+
+
+@contextmanager
+def _audit_file_lock(path: pathlib.Path):
+    """Serialize audit appends across threads and processes.
+
+    One byte of a sidecar lock file is held for the duration of a single
+    append. Order is always thread lock -> OS lock, so there is no inversion.
+    """
+    lock_path = path.with_name(path.name + ".lock")
+    with _AUDIT_THREAD_LOCK:
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                deadline = time.monotonic() + 5
+                while True:
+                    try:
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                        break
+                    except OSError:
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.005)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                if os.name == "nt":
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
+def _write_audit_line(path: pathlib.Path, line: bytes) -> None:
+    with _audit_file_lock(path):
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o640)
+        try:
+            view = memoryview(line)
+            while view:
+                written = os.write(fd, view)
+                view = view[written:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
 @contextmanager
 def audit_writer(cfg: PoolConfig, *, preflight: bool = False):
     if not cfg.guard_system_disk:
@@ -380,7 +433,7 @@ def audit_writer(cfg: PoolConfig, *, preflight: bool = False):
                     raise
                 yield None
                 return
-            stream = resources.enter_context(os.fdopen(fd, "a", encoding="utf-8"))
+            stream = resources.enter_context(os.fdopen(fd, "ab", buffering=0))
             info = _check_file_info(os.fstat(stream.fileno()), device)
 
             def verify():
@@ -390,9 +443,10 @@ def audit_writer(cfg: PoolConfig, *, preflight: bool = False):
 
             def append(event):
                 verify()
-                stream.write(_record_line(event))
-                stream.flush()
-                os.fsync(stream.fileno())
+                line = _record_line(event).encode("utf-8")
+                with _audit_file_lock(path):
+                    stream.write(line)
+                    os.fsync(stream.fileno())
                 verify()
 
             verify()
@@ -413,8 +467,7 @@ def _record_line(event: dict) -> str:
 
 def _append_record(cfg: PoolConfig, event: dict) -> None:
     cfg.records_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(cfg.records_file, "a", encoding="utf-8") as f:
-        f.write(_record_line(event))
+    _write_audit_line(cfg.records_file, _record_line(event).encode("utf-8"))
 
 
 def read_records(cfg: PoolConfig) -> list[dict]:
