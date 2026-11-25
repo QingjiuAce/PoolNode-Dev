@@ -50,7 +50,7 @@ pool.fetch（客户端，V0.4 新增）    ← 晚高峰分段并发下载器（
 
 ```bash
 python -m pip install -r requirements-dev.txt
-python -m pytest tests/          # 当前 256 passed / 1 skipped
+python -m pytest tests/          # 当前 268 passed / 1 skipped
 ```
 
 ## 快速开始（服务器部署）

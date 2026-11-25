@@ -130,7 +130,7 @@
 
 | 项 | 结果 |
 |---|---|
-| 全量 pytest | `python -m pytest tests/ -q -rs` → **256 passed / 1 skipped** |
+| 全量 pytest | `python -m pytest tests/ -q -rs` → **268 passed / 1 skipped** |
 | 编译 | `python -m compileall -q pool scripts tests` → OK |
 | CLI | `python -m pool --version` → `pool-poc 0.6.0.dev1` |
 | 数据 | 20 份恢复档案 SHA/行数一致；被跟踪 metrics 与 HEAD 归一化后一致；46 份阶段 0 数据副本仅 5 类**有意**变化（见 §6） |
@@ -235,7 +235,7 @@ cmd_remove → audit_writer（先持有并核验审计文件身份）
 ```text
 $ python -m pytest tests/ -q -rs
 SKIPPED [1] tests\test_paths.py:71: Windows 创建符号链接需要特权
-256 passed, 1 skipped, 1 warning in 16.90s
+268 passed, 1 skipped, 1 warning in 17.51s
 
 $ python -m compileall -q pool scripts tests
 （无输出，退出码 0）
@@ -252,7 +252,7 @@ pool-poc 0.6.0.dev1
 |---|---|
 | `dev`（隔离 worktree） | 157 passed / 1 skipped |
 | Alpha 移植安全基线后 | 195 passed / 1 skipped（+38 全部为 alpha 独有测试） |
-| 最终 | 256 passed / 1 skipped |
+| 最终 | 268 passed / 1 skipped |
 
 差异计数：新增 **+38**（相对 dev 基线）、删除 **0**、跳过 **1**（Windows 符号链接权限）、失败 **0**。
 
@@ -260,20 +260,21 @@ pool-poc 0.6.0.dev1
 
 | 文件 | 数量 |
 |---|---:|
-| `test_metrics_persistence.py` | 7 |
+| `test_metrics_persistence.py` | 11 |
 | `test_cmin_experiment.py` | 3 |
-| `test_bench_harness.py` | 15 |
-| `test_windows_paths.py` | 4 |
+| `test_bench_harness.py` | 19 |
+| `test_windows_paths.py` | 6 |
 | `test_version.py` | 5 |
 | `test_origin.py` | 22 |
 | `test_config_bools.py` | 19 |
-| `test_storage_concurrency.py` | 1 |
+| `test_storage_concurrency.py` | 3 |
 | `test_fixture_consistency.py` | 2 |
 | `test_collect_box_probe.py` 新增 | 3 |
 | `test_permissions.py` 新增 | 6 |
 | `test_system_disk_guard.py` 新增 | 1 |
 
-跳过的唯一测试：Windows 创建符号链接需要特权；**未统计为通过**。
+本机（Windows）跳过的唯一测试：`test_paths.py:71`（创建符号链接需要特权），**未统计为通过**。
+Windows 专属的 junction/reparse 与 `_system_root` 测试在本机实际执行；Linux CI 会将这两项标记为 skip（平台不适用）。
 
 ### 6.4 数据验证
 
@@ -294,11 +295,12 @@ pool-poc 0.6.0.dev1
 
 | 复查项 | 结论 |
 |---|---|
-| Metrics 排他创建/失败清理/并发 | 通过（本地并发测试与代码路径复核） |
-| Harness B/D 实际参数与输出校验 | 通过（命令行构造 + fetch 输出断言） |
-| 安全调用链检查先于写入 | 通过（CLI → check_system_disk → staging → publish） |
-| 审计锁顺序与 Windows 实现 | 通过（线程锁→OS 锁；100/100 测试） |
-| 未覆盖项 | 真实网络、真实跨进程 SSH 采集、GitHub CI 运行 |
+| Metrics 排他创建/失败清理/并发 | 通过；另发现 **major**：fetch 在 metrics dump 失败时会从 except 内逃逸 → 已用 `_dump_metrics` 收敛并补父目录预检；新增 4 项测试（缺目录、dump 失败、错误路径、跨进程竞争） |
+| Harness B/D 实际参数与输出校验 | 通过；发现 **minor**：D 覆盖 scheduler 时 manifest 仍标 auto → 已改为记录实际 CLI 值；新增 `run_client` 真实输出、metrics run_id 一致性 4 项测试 |
+| 安全调用链检查先于写入 | 通过（CLI → check_system_disk → staging → publish）；未发现缺口 |
+| 审计锁顺序与 Windows 实现 | 通过；发现 **minor**：guarded append 单次 write 可能短写、锁文件未防符号链接 → 已改为写循环 + POSIX `O_NOFOLLOW` + regular-file 校验；新增 guarded 并发与跨进程 2 项测试 |
+| Windows 覆盖 | 原 symlink 测试在 Windows skip；新增真实 junction(reparse) 拒绝与 `_system_root` 探测 2 项，本机实际执行 |
+| 未覆盖项 | 真实网络、真实跨机 SSH 采集、GitHub CI 远端运行 |
 
 ---
 
@@ -356,7 +358,7 @@ pool-poc 0.6.0.dev1
 | A5 | RC 报告勘误 | ✅ | `ERRATA_2026-11-26.md` + 报告横幅 + closeout 注记 |
 | A6 | 安全基线 | ✅ | guarded IO/系统盘护栏移植；系统盘 29 + 挂载 17 + 兼容 9 + T1–T5 26 = 81 项通过 |
 | A7 | Windows 根目录 | ✅ | `probe != probe.parent` + 4 项测试 |
-| A8 | 回归测试 | ✅ | 256 passed / 1 skipped；T1–T5 26 项 |
+| A8 | 回归测试 | ✅ | 268 passed / 1 skipped；T1–T5 26 项 |
 | A9 | 版本标识 | ✅ | `0.6.0.dev1` 单一来源 + 5 项测试 |
 | A10 | 发布边界 | ✅ | 未 push/发布/部署/移动 tag；服务端 V0.2 未动 |
 

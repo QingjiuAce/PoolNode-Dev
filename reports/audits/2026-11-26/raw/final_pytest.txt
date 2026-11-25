@@ -1,9 +1,9 @@
-2026-11-26 03:29:16 +0800
+2026-11-26 03:33:52 +0800
 $ python -m pytest tests/ -q -rs
-........................................................................ [ 28%]
-........................................................................ [ 56%]
-.................s...................................................... [ 84%]
-.........................................                                [100%]
+........................................................................ [ 26%]
+........................................................................ [ 53%]
+.........................s.............................................. [ 80%]
+.....................................................                    [100%]
 ============================== warnings summary ===============================
 C:\Users\36833\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\anyio\pytest_plugin.py:14
   C:\Users\36833\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\anyio\pytest_plugin.py:14: PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec.
@@ -15,4 +15,4 @@ C:\Users\36833\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\anyio\p
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ===========================
 SKIPPED [1] tests\test_paths.py:71: Windows 创建符号链接需要特权
-256 passed, 1 skipped, 1 warning in 16.98s
+268 passed, 1 skipped, 1 warning in 17.51s

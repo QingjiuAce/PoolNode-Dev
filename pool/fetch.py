@@ -26,6 +26,23 @@ def select(assets_path: pathlib.Path, asset_id: str,
     return f'{origin}/{rel}', asset.expected_sha256, asset.size_bytes
 
 
+def _dump_metrics(metrics: Metrics, path: pathlib.Path) -> bool:
+    """Best-effort diagnostic write that never masks the original outcome.
+
+    Returns False after printing a clear error for any OSError (existing
+    target, missing directory, permission, ENOSPC). A failed dump is never
+    allowed to escape as a traceback from inside an except block.
+    """
+    try:
+        metrics.dump(path)
+        return True
+    except FileExistsError as exc:
+        print(f'metrics 未写入：{exc}', file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 - diagnostics must not mask the download
+        print(f'metrics 写入失败：{exc.__class__.__name__}: {exc}', file=sys.stderr)
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='从 Pool 下载已授权且登记 SHA256 的文件')
     parser.add_argument('asset_id', help='受信白名单中的资产 ID，不接受 URL')
@@ -46,8 +63,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--origin',
                         help=f'内容源 origin（默认 POOL_ORIGIN 环境变量，再退回 {DEFAULT_ORIGIN}）')
     args = parser.parse_args(argv)
+    if args.metrics is not None and not args.metrics.parent.is_dir():
+        message = f'metrics 目录不存在: {args.metrics.parent}'
+        print(f'下载失败：{message}', file=sys.stderr)
+        if args.json:
+            print(json.dumps({'asset_id': args.asset_id, 'error': 'FileNotFoundError',
+                              'detail': message, 'run_id': None},
+                             ensure_ascii=False))
+        return 1
     metrics = Metrics(run_id=args.run_id) if args.metrics is not None else None
-    dumped = False
     try:
         if args.metrics is not None and args.metrics.exists():
             # Fail before any network or filesystem work: an existing metrics
@@ -77,27 +101,30 @@ def main(argv: list[str] | None = None) -> int:
                   'run_id': metrics.run_id if metrics is not None else None,
                   'origin': origin, 'output': str(args.output),
                   'wall_ms': round(wall * 1000, 2), 'error': None}
-        if args.json:
-            print(json.dumps(result, ensure_ascii=False))
-        else:
-            print(f'已校验 SHA256：{digest}；模式：{mode}；输出：{args.output}')
         if metrics is not None:
             metrics.add({'kind': 'download', 'ts': round(time.time(), 3),
                          'wall_ms': result['wall_ms'], 'mode': mode,
                          'scheduler': scheduler, 'size': size,
                          'workers': workers, 'error': None})
-            metrics.dump(args.metrics)
-            dumped = True
+            if not _dump_metrics(metrics, args.metrics):
+                if args.json:
+                    print(json.dumps({'asset_id': args.asset_id,
+                                      'error': 'MetricsDumpError',
+                                      'detail': str(args.metrics),
+                                      'run_id': metrics.run_id},
+                                     ensure_ascii=False))
+                return 1
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(f'已校验 SHA256：{digest}；模式：{mode}；输出：{args.output}')
         return 0
     except BaseException as exc:
-        if metrics is not None and not dumped:
+        if metrics is not None:
             metrics.add({'kind': 'download', 'ts': round(time.time(), 3),
                          'wall_ms': None, 'mode': None, 'size': None,
                          'workers': None, 'error': exc.__class__.__name__})
-            try:
-                metrics.dump(args.metrics)
-            except FileExistsError as dump_exc:
-                print(f'metrics 未写入：{dump_exc}', file=sys.stderr)
+            _dump_metrics(metrics, args.metrics)
         if args.json:
             print(json.dumps({'asset_id': args.asset_id, 'error': exc.__class__.__name__,
                               'detail': str(exc)[:300],

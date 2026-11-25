@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import subprocess
 import sys
 
 import pytest
@@ -133,3 +134,59 @@ def test_missing_assets_manifest_fails_before_network(tmp_path, capsys):
 def test_default_assets_manifest_exists():
     assert bench.ASSETS.is_file()
     assert bench.ASSETS.name == 'bench-assets.yaml'
+
+
+def _fake_client(monkeypatch, out, scheduler, *, mode='range', run_id_override=None):
+    def fake_run(cmd, **kwargs):
+        metrics_path = pathlib.Path(cmd[cmd.index('--metrics') + 1])
+        run_id = cmd[cmd.index('--run-id') + 1]
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        metrics_path.write_text(json.dumps({
+            'kind': 'download', 'scheduler': scheduler, 'mode': mode,
+            'run_id': run_id_override or run_id}) + '\n', encoding='utf-8')
+        (out / 'dl.bin').write_bytes(b'x')
+        stdout = json.dumps({'scheduler': scheduler, 'mode': mode})
+        return subprocess.CompletedProcess(cmd, 0, stdout, '')
+
+    monkeypatch.setattr(bench.subprocess, 'run', fake_run)
+    monkeypatch.setattr(bench, 'sha256_file',
+                        lambda path: bench.FILES['bench-6m']['sha'])
+
+
+def test_run_client_verifies_actual_metrics_for_arm_b(monkeypatch, tmp_path):
+    out = tmp_path / 'out'
+    (out / 'metrics').mkdir(parents=True)
+    _fake_client(monkeypatch, out, 'static')
+    rec = bench.run_client('B', 16, 'bench-6m', out, 'assets.yaml', 'run.001')
+    assert rec['policy_ok'] is True
+    assert rec['metrics_ok'] is True
+    assert rec['actual_scheduler'] == 'static'
+    assert rec['scheduler_arg'] == 'static'
+
+
+def test_run_client_rejects_b_that_ran_dynamic(monkeypatch, tmp_path):
+    out = tmp_path / 'out'
+    (out / 'metrics').mkdir(parents=True)
+    _fake_client(monkeypatch, out, 'dynamic')
+    rec = bench.run_client('B', 16, 'bench-6m', out, 'assets.yaml', 'run.001')
+    assert rec['policy_ok'] is False
+    assert rec['actual_scheduler'] == 'dynamic'
+
+
+def test_run_client_rejects_metrics_run_id_mismatch(monkeypatch, tmp_path):
+    out = tmp_path / 'out'
+    (out / 'metrics').mkdir(parents=True)
+    _fake_client(monkeypatch, out, 'static', run_id_override='other-run')
+    rec = bench.run_client('B', 16, 'bench-6m', out, 'assets.yaml', 'run.001')
+    assert rec['metrics_ok'] is False
+    assert rec['policy_ok'] is False
+
+
+def test_run_client_records_overridden_d_scheduler_arg(monkeypatch, tmp_path):
+    out = tmp_path / 'out'
+    (out / 'metrics').mkdir(parents=True)
+    _fake_client(monkeypatch, out, 'dynamic')
+    rec = bench.run_client('D', 16, 'bench-6m', out, 'assets.yaml', 'run.001',
+                           d_cli='dynamic')
+    assert rec['scheduler_arg'] == 'dynamic'
+    assert rec['policy_ok'] is True

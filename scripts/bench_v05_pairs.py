@@ -162,15 +162,20 @@ def run_client(arm, workers, asset, out, assets, metrics_run_id, d_cli='auto',
         actual = metrics_rec.get('scheduler')
     if mode is None and metrics_rec is not None:
         mode = metrics_rec.get('mode')
-    policy_ok = policy_verdict(arm, size, d_cli, rc=p.returncode, sha_ok=sha_ok,
-                               mode=mode, actual=actual)
+    metrics_ok = (metrics_rec is not None
+                  and metrics_rec.get('run_id') == metrics_run_id)
+    policy_ok = (policy_verdict(arm, size, d_cli, rc=p.returncode, sha_ok=sha_ok,
+                                mode=mode, actual=actual)
+                 and metrics_ok)
+    scheduler_arg = d_cli if arm == 'D' else spec.cli_scheduler
     return {
         'arm': arm, 'workers': spec.workers or workers,
         'wall_ms': round(wall * 1000, 2), 'sha_ok': sha_ok,
         'mode': mode, 'rc': p.returncode,
-        'scheduler_arg': ('auto' if arm == 'D' else spec.cli_scheduler),
+        'scheduler_arg': scheduler_arg,
         'expected_scheduler': expected, 'actual_scheduler': actual,
-        'policy_ok': policy_ok, 'metrics_run_id': metrics_run_id,
+        'policy_ok': policy_ok, 'metrics_ok': metrics_ok,
+        'metrics_run_id': metrics_run_id,
         'metrics_file': str(metrics_path.relative_to(out)),
         'err': (p.stderr or '')[-300:] if p.returncode else '',
     }

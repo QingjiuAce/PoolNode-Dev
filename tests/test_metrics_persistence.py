@@ -3,11 +3,16 @@ complete files only."""
 from __future__ import annotations
 
 import json
+import pathlib
+import subprocess
+import sys
 import threading
 
 import pytest
 
 from pool import fetch, range_transport as rt
+
+REPO = pathlib.Path(__file__).resolve().parents[1]
 
 
 def _records(path):
@@ -123,3 +128,67 @@ def test_fetch_metrics_carry_run_id(monkeypatch, tmp_path):
     assert {r['run_id'] for r in rows} == {'fetch-run-1'}
     assert rows[-1]['kind'] == 'download'
     assert rows[-1]['scheduler'] == 'static'  # 1024 B -> auto resolves to static
+
+
+def test_fetch_missing_metrics_parent_fails_before_download(monkeypatch, tmp_path,
+                                                           capsys):
+    monkeypatch.setattr(fetch, 'select', lambda *a: pytest.fail('must not select'))
+    monkeypatch.setattr(fetch, 'download', lambda *a: pytest.fail('must not download'))
+    path = tmp_path / 'missing-dir' / 'm.jsonl'
+    rc = fetch.main(['asset', str(tmp_path / 'out.jpg'), '--assets', 'any.yaml',
+                     '--metrics', str(path)])
+    assert rc == 1
+    assert 'metrics 目录不存在' in capsys.readouterr().err
+
+
+def test_fetch_metrics_dump_failure_is_loud_but_contained(monkeypatch, tmp_path,
+                                                          capsys):
+    monkeypatch.setattr(fetch, 'select',
+                        lambda *a: ('https://dl.bszx.site/x.jpg', 'a' * 64, 1024))
+    monkeypatch.setattr(fetch, 'download', lambda *a: 'single')
+
+    def broken_dump(self, path):
+        raise OSError('disk full')
+
+    monkeypatch.setattr(rt.Metrics, 'dump', broken_dump)
+    rc = fetch.main(['asset', str(tmp_path / 'out.jpg'), '--assets', 'any.yaml',
+                     '--metrics', str(tmp_path / 'm.jsonl')])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert 'metrics 写入失败' in err and 'disk full' in err
+
+
+def test_fetch_error_path_dump_failure_keeps_original_error(monkeypatch, tmp_path,
+                                                            capsys):
+    monkeypatch.setattr(fetch, 'select',
+                        lambda *a: (_ for _ in ()).throw(ValueError('bad manifest')))
+
+    def broken_dump(self, path):
+        raise OSError('no space')
+
+    monkeypatch.setattr(rt.Metrics, 'dump', broken_dump)
+    rc = fetch.main(['asset', str(tmp_path / 'out.jpg'), '--assets', 'any.yaml',
+                     '--metrics', str(tmp_path / 'm.jsonl')])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert '下载失败：bad manifest' in err
+    assert 'metrics 写入失败' in err and 'no space' in err
+
+
+def test_cross_process_dump_same_path_exactly_one_wins(tmp_path):
+    path = tmp_path / 'm.jsonl'
+    code = (
+        "import sys\n"
+        "from pool.range_transport import Metrics\n"
+        "m = Metrics(run_id=sys.argv[2])\n"
+        "m.add({'kind': 'request'})\n"
+        "m.dump(sys.argv[1])\n"
+    )
+    procs = [subprocess.Popen([sys.executable, '-c', code, str(path), f'run-{i}'],
+                              cwd=REPO, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL) for i in range(2)]
+    rcs = sorted(p.wait(timeout=60) for p in procs)
+    assert rcs == [0, 1]
+    rows = _records(path)
+    assert len(rows) == 1
+    assert rows[0]['run_id'] in {'run-0', 'run-1'}

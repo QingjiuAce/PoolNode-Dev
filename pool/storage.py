@@ -373,8 +373,13 @@ def _audit_file_lock(path: pathlib.Path):
     """
     lock_path = path.with_name(path.name + ".lock")
     with _AUDIT_THREAD_LOCK:
-        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        flags = os.O_CREAT | os.O_RDWR
+        if os.name != "nt":
+            flags |= os.O_NOFOLLOW
+        fd = os.open(lock_path, flags, 0o600)
         try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise OSError(errno.EINVAL, "unsafe audit lock file")
             if os.name == "nt":
                 import msvcrt
                 deadline = time.monotonic() + 5
@@ -445,7 +450,10 @@ def audit_writer(cfg: PoolConfig, *, preflight: bool = False):
                 verify()
                 line = _record_line(event).encode("utf-8")
                 with _audit_file_lock(path):
-                    stream.write(line)
+                    view = memoryview(line)
+                    while view:
+                        written = stream.write(view)
+                        view = view[written:]
                     os.fsync(stream.fileno())
                 verify()
 

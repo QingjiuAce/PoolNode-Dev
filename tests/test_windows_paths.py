@@ -3,12 +3,15 @@ root, and a regular file is never treated as a directory."""
 from __future__ import annotations
 
 import dataclasses
+import os
 import pathlib
+import subprocess
 
 import pytest
 
 from conftest import write_config
 from pool import cli, storage
+from pool._guarded_io import directory
 from pool.config import load_config
 
 
@@ -64,3 +67,23 @@ def test_existing_directory_terminates_at_anchor(monkeypatch, tmp_path):
     monkeypatch.setattr(pathlib.Path, 'stat', fake_stat)
     with pytest.raises(FileNotFoundError):
         storage._existing_directory(missing)
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows junction is Windows-only')
+def test_junction_component_is_rejected(tmp_path):
+    """A real reparse point (junction) must not be traversed as a directory."""
+    target = tmp_path / 'real'
+    target.mkdir()
+    link = tmp_path / 'link'
+    subprocess.run(['cmd', '/c', 'mklink', '/J', str(link), str(target)],
+                   check=True, capture_output=True)
+    with pytest.raises(OSError):
+        with directory(link, target.stat().st_dev):
+            pass
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows system root is Windows-only')
+def test_system_root_is_a_drive_anchor():
+    root = storage._system_root()
+    assert root.is_absolute()
+    assert len(root.drive) == 2
