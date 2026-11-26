@@ -55,10 +55,14 @@ python -X utf8 scripts\experiment\runner.py --task probe
   "timezone": "Asia/Shanghai",
   "max_bytes": 120000000,
   "single_use": true,
+  "seed": 20261127,
   "approved_by": "<授权人>",
   "approved_at": "<ISO 时间>"
 }
 ```
+
+`seed` 会被 runner 追加为 `--seed 20261127`（RUN-02 §A3 固定种子）；
+`max_bytes` 会同时用于"计划预检"和子进程内的原子预算（`POOL_BUDGET_LIMIT`）。
 
 门控行为：缺文件 → `SKIPPED: no_authorization`；小时不匹配 → 同上；
 同一窗口第二次 → `SKIPPED: authorization_already_consumed:<run_id>`；
