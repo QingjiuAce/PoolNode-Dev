@@ -30,6 +30,7 @@ import platform
 import re
 import shutil
 import ssl
+import sys
 import statistics
 import tempfile
 import threading
@@ -38,6 +39,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlsplit
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import budget_guard  # noqa: E402
+
+# 仅当 runner 传入 POOL_BUDGET_LIMIT 时启用；否则为 None，行为与之前完全一致
+BUDGET = budget_guard.from_env()
 
 DEFAULT_ORIGIN = 'https://dl.bszx.site'
 HOST = urlsplit(DEFAULT_ORIGIN).hostname
@@ -110,6 +117,9 @@ def _fetch(ctx, path, size, span=None, etag=None, sink=None, timeout=60.0):
         expected = end - start + 1
     else:
         expected = size
+    if BUDGET is not None:
+        # 在任何连接建立之前预留；不足则这里直接抛 BudgetExceeded
+        BUDGET.reserve(expected)
     conn = http.client.HTTPSConnection(HOST, PORT, timeout=timeout, context=ctx)
     try:
         conn.request('GET', path, headers=headers)
@@ -151,6 +161,9 @@ def _fetch(ctx, path, size, span=None, etag=None, sink=None, timeout=60.0):
                 raise ProbeError('oversized body')
             return tag
     finally:
+        if BUDGET is not None:
+            # 保守计入：无论成功/失败，预留额都算已消耗（不猜"字节没发出"）
+            BUDGET.commit(expected)
         conn.close()
 
 

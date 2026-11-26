@@ -262,8 +262,8 @@ def precheck(task_name: str, task: dict, out_dir: pathlib.Path | None,
 def validate_outputs(task: dict, target: pathlib.Path, before_lines: int,
                      corrupt: str | None) -> dict:
     report = {"path": str(target), "new_records": 0, "bad_json": 0, "missing_fields": 0,
-              "duplicate_keys": 0, "sha_failures": 0, "retries_total": 0,
-              "ok": True, "detail": []}
+              "duplicate_keys": 0, "sha_failures": 0, "error_records": 0,
+              "retries_total": 0, "ok": True, "detail": []}
     if not target.exists():
         report.update(ok=False, detail=[f"missing_output:{target}"])
         return report
@@ -288,8 +288,12 @@ def validate_outputs(task: dict, target: pathlib.Path, before_lines: int,
             if key not in rec:
                 report["missing_fields"] += 1
                 break
-        if task.get("sha_field") and rec.get(task["sha_field"]) is False:
-            report["sha_failures"] += 1
+        if rec.get("status") in (None, "ok"):
+            if task.get("sha_field") and rec.get(task["sha_field"]) is False:
+                report["sha_failures"] += 1
+        else:
+            # 记录里明确标了 error/timeout 的臂：是"已知失败"，不是校验失败
+            report["error_records"] += 1
         try:
             report["retries_total"] += int(rec.get("retries") or 0)
         except (TypeError, ValueError):
@@ -608,6 +612,9 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         base = list(task["smoke_args"] if smoke else task["args"])
         args = strip_out(base) + ["--out", out_target(task, target)]
         state["out_arg"] = out_target(task, target)
+        if auth and task_name == "cmin" and auth.get("seed") is not None:
+            # 正式窗口的随机种子由授权指定（RUN-02 §A3）
+            args += ["--seed", str(int(auth["seed"]))]
         interpreter = override.get("interpreter", sys.executable)
         cmd = [interpreter, "-X", "utf8", str(pathlib.Path(override["script"])
                                              if override.get("script")
@@ -615,14 +622,24 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         if override.get("extra_args"):
             cmd += list(override["extra_args"])
 
+        env = os.environ.copy()
+        budget_state_path = LOGS / "budget" / f"{rid}.json"
+        if budget_max is not None and task.get("plan"):
+            budget_state_path.parent.mkdir(parents=True, exist_ok=True)
+            env["POOL_BUDGET_LIMIT"] = str(budget_max)
+            env["POOL_BUDGET_STATE"] = str(budget_state_path)
+
         before = count_lines(target)
         log(f"[CMD] {' '.join(cmd)}\n[EXEC] start {now():%H:%M:%S}")
+        if "POOL_BUDGET_LIMIT" in env:
+            log(f"[BUDGET] limit={env['POOL_BUDGET_LIMIT']} state={budget_state_path}")
 
         timeout = float(override.get("timeout", task["timeout"]))
         t0 = time.perf_counter()
         try:
             proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True,
-                                  encoding="utf-8", errors="replace", timeout=timeout)
+                                  encoding="utf-8", errors="replace", timeout=timeout,
+                                  env=env)
             out, err, rc = proc.stdout, proc.stderr, proc.returncode
         except subprocess.TimeoutExpired as exc:
             elapsed = time.perf_counter() - t0
@@ -634,14 +651,28 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         elapsed = time.perf_counter() - t0
         log(f"[EXEC] rc={rc} elapsed={elapsed:.1f}s\n--- stdout ---\n{out}\n--- stderr ---\n{err}")
 
+        budget_rt = None
+        if budget_state_path.is_file():
+            try:
+                budget_rt = json.loads(budget_state_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                budget_rt = None
+        if budget_rt is not None:
+            state["budget_runtime"] = budget_rt
+        budget_stopped = bool(budget_rt and budget_rt.get("stopped"))
+
         if rc == 0 and "skip:" in out.lower() and not out.strip().startswith("{"):
             line = next((l for l in out.splitlines() if "skip:" in l), "skip")
             return finish("SKIPPED", line[:200], rc_raw=rc)
 
-        if rc != 0:
+        if rc != 0 and not budget_stopped:
             tail = (err or out).strip().splitlines()
             return finish("FAILED", (tail[-1][:300] if tail else f"rc={rc}"), rc_raw=rc,
                           elapsed_s=round(elapsed, 1))
+        if rc != 0 and budget_stopped:
+            # 预算终止不是失败：已完成的数据仍要校验、归档（RUN-02 §A4）
+            log("[BUDGET-STOP] " + str((budget_rt or {}).get("stop_reason"))
+                + f"; rc={rc}，继续校验已完成数据")
 
         report = validate_outputs(task, target, before, override.get("corrupt"))
         state.update(output_files=[report["path"]], record_count=report["new_records"],
@@ -658,12 +689,14 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
 
         plan = task.get("plan") or {}
         if plan and budget_max is not None:
-            bytes_dl = report["new_records"] * int(plan.get("bytes_each", 0))
+            ok_records = report["new_records"] - report.get("error_records", 0)
+            bytes_dl = ok_records * int(plan.get("bytes_each", 0))
             state["budget"] = {
                 "max_bytes": budget_max,
                 "expected_bytes": int(plan.get("downloads", 0)) * int(plan.get("bytes_each", 0)),
                 "downloaded_bytes": bytes_dl,
                 "retries_total": report.get("retries_total", 0),
+                "error_records": report.get("error_records", 0),
                 "status": "exceeded" if bytes_dl > budget_max else "ok"}
             log("[BUDGET] " + json.dumps(state["budget"], ensure_ascii=False))
             if bytes_dl > budget_max:
@@ -677,7 +710,8 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
             uploads.append((pathlib.Path(tel_path), f"{rid}-telemetry.json"))
         dest = f"/srv/pool/labnode/experiment-inbox/{'smoke/' if smoke else ''}{task_name}/{started:%Y-%m-%d}"
         # 上传前先落"最终状态"：否则远端归档里的状态文件永远是 RUNNING
-        state.update(status="SUCCESS", exit_code=EXIT["SUCCESS"],
+        provisional = "PARTIAL" if budget_stopped else "SUCCESS"
+        state.update(status=provisional, exit_code=EXIT[provisional],
                      end_time=now().isoformat(), upload_status="pending")
         write_json(state_path, state)
         log("[UPLOAD] start " + dest)
@@ -687,6 +721,9 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         log("[UPLOAD] " + json.dumps(up, ensure_ascii=False))
         if up["enabled"] and not up["ok"]:
             return finish("PARTIAL", f"upload:{up['detail']}", upload=up)
+        if budget_stopped:
+            reason = str((budget_rt or {}).get("stop_reason"))[:260]
+            return finish("PARTIAL", f"budget_exhausted:{reason}", upload=up)
         return finish("SUCCESS", f"records+{report['new_records']}", upload=up)
     finally:
         lock_set.release()

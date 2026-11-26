@@ -282,6 +282,7 @@ def _write_auth(hour=12, minute=15, max_bytes=120_000_000, **extra):
     runner.AUTH_DIR.mkdir(parents=True, exist_ok=True)
     data = {"task": "rcv05", "date": "2026-11-27", "hour": hour, "minute": minute,
             "timezone": "Asia/Shanghai", "max_bytes": max_bytes, "single_use": True,
+            "seed": 20261127,
             "approved_by": "test", "approved_at": "2026-11-27T11:30:00+08:00"}
     data.update(extra)
     runner.AUTH_DIR.joinpath(f"rcv05-2026-11-27T{hour:02d}.json").write_text(
@@ -359,6 +360,166 @@ def test_upload_accepts_key_auth_without_password(monkeypatch, tmp_path):
     res = runner.remote_upload([(tmp_path / "f", "f")], "/tmp/x")
     assert res["enabled"] is True
     assert res["detail"].startswith("connect_failed:")
+
+
+# --------------------------------------------------------------------------
+# 进程内流量硬预算（RUN-02 §A4）
+# --------------------------------------------------------------------------
+def test_budget_reserve_commit_and_hard_stop():
+    import budget_guard
+    b = budget_guard.Budget(10)
+    b.reserve(6); b.commit(6)
+    b.reserve(4); b.commit(4)
+    with pytest.raises(budget_guard.BudgetExceeded):
+        b.reserve(1)
+    assert b.stopped and b.spent == 10
+    with pytest.raises(budget_guard.BudgetExceeded):
+        b.reserve(0)          # 终止后连 0 字节也不放行
+
+
+def test_budget_is_thread_safe():
+    import budget_guard
+    import threading
+    b = budget_guard.Budget(1000)
+    wins = []
+
+    def worker():
+        for _ in range(50):
+            try:
+                b.reserve(100)
+                wins.append(1)
+            except budget_guard.BudgetExceeded:
+                return
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(wins) == 10                 # 恰好 10 次通过，没有超卖
+    assert b.reserved + b.spent == 1000
+
+
+def test_budget_state_file_is_written(tmp_path):
+    import budget_guard
+    state = tmp_path / "budget.json"
+    b = budget_guard.Budget(100, str(state))
+    b.reserve(60); b.commit(60)
+    data = json.loads(state.read_text(encoding="utf-8"))
+    assert data["limit"] == 100 and data["spent"] == 60 and data["stopped"] is False
+    with pytest.raises(budget_guard.BudgetExceeded):
+        b.reserve(41)
+    data = json.loads(state.read_text(encoding="utf-8"))
+    assert data["stopped"] is True and "budget_exceeded" in data["stop_reason"]
+
+
+def test_budget_dump_does_not_deadlock(tmp_path):
+    """dump() 在持锁路径上被调用；改成非重入锁会在这里超时失败而不是挂住套件。"""
+    import budget_guard
+    import threading
+    b = budget_guard.Budget(1000, str(tmp_path / "b.json"))
+    done = []
+
+    def work():
+        b.reserve(10)
+        b.commit(10)
+        b.stop("manual")
+        done.append(1)
+
+    t = threading.Thread(target=work)
+    t.start()
+    t.join(5)
+    assert done == [1], "budget dump deadlocked"
+
+
+def test_fetch_refuses_before_connecting(monkeypatch):
+    """预算耗尽时 _fetch 必须在建立连接之前抛错。"""
+    import budget_guard
+    import peak_probe as pp
+    b = budget_guard.Budget(5)
+    monkeypatch.setattr(pp, "BUDGET", b)
+    opened = []
+    monkeypatch.setattr(pp.http.client, "HTTPSConnection",
+                        lambda *a, **k: opened.append(1))
+    with pytest.raises(budget_guard.BudgetExceeded):
+        pp._fetch(None, "/x", 100)
+    assert opened == []
+
+
+def _recorder_task(tmp_path, *, stopped: bool, exit_code: int):
+    """假脚本记录 argv / 预算环境变量，并（可选）写一份终止态预算。"""
+    record = tmp_path / "invocation.json"
+    script = tmp_path / "fake_recorder.py"
+    script.write_text(
+        "import argparse, json, os, pathlib, sys\n"
+        "ap = argparse.ArgumentParser()\n"
+        "ap.add_argument('--out'); ap.add_argument('--seed', type=int, default=None)\n"
+        "a, _ = ap.parse_known_args()\n"
+        "p = pathlib.Path(a.out); p.parent.mkdir(parents=True, exist_ok=True)\n"
+        "p.write_text(json.dumps({'ts': '2026-11-27T12:15:00', 'cmin': 98304,\n"
+        "                         'workers': 1, 'rep': 0, 'arm': 'single', 'round': 0,\n"
+        "                         'sha_ok': True, 'status': 'ok'}) + '\\n')\n"
+        f"pathlib.Path({str(record)!r}).write_text(json.dumps({{\n"
+        "    'argv': sys.argv[1:],\n"
+        "    'budget_limit': os.environ.get('POOL_BUDGET_LIMIT'),\n"
+        "    'budget_state': os.environ.get('POOL_BUDGET_STATE')}), encoding='utf-8')\n"
+        + (
+            "st = os.environ.get('POOL_BUDGET_STATE')\n"
+            "if st:\n"
+            "    pathlib.Path(st).write_text(json.dumps({'limit': 120000000, 'spent': 120000000,\n"
+            "        'reserved': 0, 'requests': 68, 'rejected': 1, 'stopped': True,\n"
+            "        'stop_reason': 'budget_exceeded: projected 121000000 > limit 120000000'}), encoding='utf-8')\n"
+            if stopped else ""
+        )
+        + f"raise SystemExit({exit_code})\n",
+        encoding="utf-8")
+    task = dict(runner.TASKS["cmin"])
+    task.update(script=str(script), args=[], smoke_args=[], suspended=False,
+                telemetry=False, hours={12}, requires_authorization=True,
+                out_style="file", output=str(tmp_path / "out" / "runs.jsonl"),
+                plan={"downloads": 40, "bytes_each": 1_778_514})
+    return task, record
+
+
+def test_runner_injects_seed_and_budget_env(monkeypatch, tmp_path):
+    _dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "code_dirty", lambda: [])
+    monkeypatch.setattr(runner, "REMOTE_CONF", tmp_path / "no-remote.json")
+    monkeypatch.setattr(runner, "now",
+                        lambda: dt.datetime(2026, 11, 27, 12, 15, tzinfo=BJ))
+    runner.AUTH_DIR.mkdir(parents=True, exist_ok=True)
+    (runner.AUTH_DIR / "cmin-2026-11-27T12.json").write_text(json.dumps({
+        "task": "cmin", "date": "2026-11-27", "hour": 12, "minute": 15,
+        "timezone": "Asia/Shanghai", "max_bytes": 120_000_000, "single_use": True,
+        "seed": 20261127, "approved_by": "test",
+        "approved_at": "2026-11-27T11:30:00+08:00"}), encoding="utf-8")
+    task, record = _recorder_task(tmp_path, stopped=False, exit_code=0)
+    st = runner.execute("cmin", task, "seed-env-test", override={"skip_origin": True})
+    assert st["status"] == "SUCCESS", st
+    inv = json.loads(record.read_text(encoding="utf-8"))
+    assert "--seed" in inv["argv"] and "20261127" in inv["argv"]
+    assert inv["budget_limit"] == "120000000"
+    assert inv["budget_state"].endswith("seed-env-test.json")
+
+
+def test_budget_stop_marks_partial_but_keeps_data(monkeypatch, tmp_path):
+    _dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "code_dirty", lambda: [])
+    monkeypatch.setattr(runner, "REMOTE_CONF", tmp_path / "no-remote.json")
+    monkeypatch.setattr(runner, "now",
+                        lambda: dt.datetime(2026, 11, 27, 12, 15, tzinfo=BJ))
+    runner.AUTH_DIR.mkdir(parents=True, exist_ok=True)
+    (runner.AUTH_DIR / "cmin-2026-11-27T12.json").write_text(json.dumps({
+        "task": "cmin", "date": "2026-11-27", "hour": 12, "minute": 15,
+        "timezone": "Asia/Shanghai", "max_bytes": 120_000_000, "single_use": True,
+        "seed": 20261127, "approved_by": "test",
+        "approved_at": "2026-11-27T11:30:00+08:00"}), encoding="utf-8")
+    task, _ = _recorder_task(tmp_path, stopped=True, exit_code=1)
+    st = runner.execute("cmin", task, "budget-stop-test", override={"skip_origin": True})
+    assert st["status"] == "PARTIAL"
+    assert st["error_summary"].startswith("budget_exhausted")
+    assert st["record_count"] == 1                 # 已完成的数据保留
+    assert st["budget_runtime"]["stopped"] is True
 
 
 # --------------------------------------------------------------------------

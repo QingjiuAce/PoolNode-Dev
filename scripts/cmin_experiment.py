@@ -90,6 +90,8 @@ def main(argv=None) -> int:
                                          'reports' / 'benchmarks' / 'cmin-experiment' / 'runs.jsonl'))
     ap.add_argument('--only-hours', default='', help='仅这些小时运行（逗号分隔）')
     ap.add_argument('--dedupe-hour', action='store_true', help='本小时已跑过则跳过')
+    ap.add_argument('--seed', type=int, default=None,
+                    help='固定随机种子（正式窗口由授权指定；默认每次随机）')
     ap.add_argument('--timeout', type=float, default=120.0)
     ap.add_argument('--origin', default=os.environ.get('POOL_ORIGIN', pp.DEFAULT_ORIGIN),
                     help='内容源 origin（默认 POOL_ORIGIN 环境变量或生产 origin）')
@@ -114,7 +116,7 @@ def main(argv=None) -> int:
     tmpdir = tempfile.mkdtemp(prefix='cmin-')
     run_id = new_run_id()
     # 随机化必须可复现（PN-EXPERIMENT-01 §3.2）：显式播种并记录到每条记录
-    seed = secrets.randbits(32)
+    seed = args.seed if args.seed is not None else secrets.randbits(32)
     rng = random.Random(seed)
     rc = 0
     print(f'run_id={run_id} seed={seed}', flush=True)
