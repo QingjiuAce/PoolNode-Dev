@@ -353,7 +353,12 @@ def test_budget_overrun_is_refused_before_consuming(monkeypatch, tmp_path):
 
 
 def test_upload_accepts_key_auth_without_password(monkeypatch, tmp_path):
-    """配置里只有 key 没有 password 时不得抛 KeyError（2026-11-27 起的默认形态）。"""
+    """配置里只有 key 没有 password 时不得抛 KeyError（2026-11-27 起的默认形态）。
+
+    paramiko 只装在跑实验的 Windows 机器上，CI 不装；这里没有 paramiko 就跳过，
+    否则测的只是"依赖缺失后 enabled=False"这条早退路径。
+    """
+    pytest.importorskip("paramiko")
     known = tmp_path / "known_hosts"
     known.write_text("", encoding="utf-8")
     conf = tmp_path / "remote.json"
