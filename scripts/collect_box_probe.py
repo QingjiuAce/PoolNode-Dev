@@ -86,12 +86,22 @@ def validate_jsonl(payload: bytes) -> int:
 
 
 def merge_append(local_path: Path, remote_bytes: bytes) -> int:
-    """Append only the new tail; require a byte-identical prefix."""
+    """Append only the new tail; require a line-normalized prefix.
+
+    历史归档是被 Git 以 CRLF 检出的（本仓库 core.autocrlf=true），而远端
+    探针写的是 LF。逐字节比较会因此永久失败，但内容并没有分歧。
+    这里只在"按行归一化后本地仍是远端前缀"时接受，并且**仍然只追加远端
+    尾部字节**——本地既有字节一个不改，历史记录保持原样。
+    """
     local = local_path.read_bytes() if local_path.exists() else b''
     if local and not local.endswith(b'\n'):
         raise RuntimeError('local archive does not end at a line boundary')
     if not remote_bytes.startswith(local):
-        raise RuntimeError('remote file diverges from local archive (not an extension)')
+        normalized = local.replace(b'\r\n', b'\n')
+        if not normalized or not remote_bytes.startswith(normalized):
+            raise RuntimeError('remote file diverges from local archive (not an extension)')
+        log('WARN local archive uses CRLF; remote is LF; prefix accepted after normalization')
+        local = normalized
     payload = remote_bytes[len(local):]
     if payload:
         validate_jsonl(payload)

@@ -9,7 +9,8 @@ Reuses peak_probe's transport, verification and per-segment timing primitives.
 Each arm is a pair: both C_MIN values run back-to-back (randomized A/B order)
 inside the same worker group, so no other download can interleave within a
 pair. Worker-group order is shuffled per rep. One JSONL record per arm, each
-carrying a run_id and a unique arm_id.
+carrying run_id, the RNG seed, the realized execution sequence (`seq`) and a
+unique arm_id.
 
 Usage:
   python scripts/cmin_experiment.py --reps 5                 # healthy run now
@@ -112,12 +113,17 @@ def main(argv=None) -> int:
     ctx.set_alpn_protocols(['http/1.1'])
     tmpdir = tempfile.mkdtemp(prefix='cmin-')
     run_id = new_run_id()
+    # 随机化必须可复现（PN-EXPERIMENT-01 §3.2）：显式播种并记录到每条记录
+    seed = secrets.randbits(32)
+    rng = random.Random(seed)
     rc = 0
+    print(f'run_id={run_id} seed={seed}', flush=True)
     try:
-        for rep, cmin, workers, name in build_order(cmins, ARMS, args.reps):
+        for seq, (rep, cmin, workers, name) in enumerate(
+                build_order(cmins, ARMS, args.reps, rng)):
             spans = plan(SIZE, workers, cmin)
             rec = {'ts': now.isoformat(timespec='seconds'),
-                   'epoch': round(time.time(), 3), 'run_id': run_id,
+                   'epoch': round(time.time(), 3), 'run_id': run_id, 'seed': seed, 'seq': seq,
                    'arm_id': arm_id(run_id, rep, name, cmin),
                    'slot_kind': slot_kind(now), 'rep': rep,
                    'cmin': cmin, 'workers': workers, 'arm': name,

@@ -27,10 +27,29 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import locks  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOGS = ROOT / "reports" / "experiment-logs"
 STATE_DIR = LOGS / "state"
 SMOKE_DIR = LOGS / "smoke"
+TELEMETRY_DIR = LOGS / "telemetry"
+
+
+def _default_lock_dir() -> pathlib.Path:
+    """锁必须跨 worktree 生效：同一台机器上两个 worktree 不能各锁各的。"""
+    env = os.environ.get("POOL_LOCK_DIR")
+    if env:
+        return pathlib.Path(env)
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA") or pathlib.Path.home()
+        return pathlib.Path(base) / "PoolNode" / "locks"
+    return pathlib.Path.home() / ".cache" / "poolnode" / "locks"
+
+
+LOCK_DIR = _default_lock_dir()
+LOCK_JOURNAL = LOGS / "locks.jsonl"
 REMOTE_CONF = pathlib.Path(os.environ.get("POOL_REMOTE_CONF",
                                          pathlib.Path.home() / ".pool" / "remote.json"))
 EXIT = {"SUCCESS": 0, "FAILED": 1, "SKIPPED": 3, "PARTIAL": 4, "TIMEOUT": 5}
@@ -39,8 +58,9 @@ EXIT = {"SUCCESS": 0, "FAILED": 1, "SKIPPED": 3, "PARTIAL": 4, "TIMEOUT": 5}
 TASKS: dict[str, dict] = {
     "cmin": {
         "script": "scripts/cmin_experiment.py",
-        "args": ["--only-hours", "1,12,20,21,22,23", "--dedupe-hour", "--reps", "5"],
-        "hours": {1, 12, 20, 21, 22, 23},
+        # 五档正式窗口（任务书 §3.1）；1 点档仅存在于历史数据，不属计划
+        "args": ["--only-hours", "12,20,21,22,23", "--dedupe-hour", "--reps", "5"],
+        "hours": {12, 20, 21, 22, 23},
         "timeout": 1800,
         "out_style": "file",
         "output": "reports/benchmarks/cmin-experiment/runs.jsonl",
@@ -48,8 +68,13 @@ TASKS: dict[str, dict] = {
         "sha_field": "sha_ok",
         "needs": ["config/bench-assets.yaml"],
         "origin": True,
+        # 正式实验需单独授权（§4.3）；未授权前即便任务被触发也拒绝执行
+        "suspended": True,
+        "suspend_reason": "C_MIN 正式实验尚未获得窗口授权（PN-EXPERIMENT-01 §4.3）",
+        "resources": ["link:local-hk", "out:cmin-experiment"],
+        "telemetry": True,
         "smoke_args": ["--reps", "1", "--cmin", "98304"],
-        "purpose": "C_MIN 96K/128K 背靠背配对（六档）",
+        "purpose": "C_MIN 96K/128K 背靠背配对（五档）",
     },
     "rcv05": {
         "script": "scripts/bench_v05_pairs.py",
@@ -63,6 +88,7 @@ TASKS: dict[str, dict] = {
         "sha_field": "sha_ok",
         "needs": ["config/bench-assets.yaml"],
         "origin": True,
+        "resources": ["link:local-hk", "out:v05-rc1"],
         "smoke_args": ["--arms", "B,D", "--pairs", "1", "--workers", "4"],
         "purpose": "v0.4 static vs v0.5 auto 配对（B/D）",
     },
@@ -78,14 +104,15 @@ TASKS: dict[str, dict] = {
         "sha_field": "sha_ok",
         "needs": ["config/bench-assets.yaml"],
         "origin": True,
+        "resources": ["link:local-hk", "out:v05-chunk-queue"],
         "smoke_args": ["--reps", "1", "--force"],
         "purpose": "v0.5 分块队列 A(static16)/B(dyn16)/C(dyn21)",
     },
     "probe": {
         "script": "scripts/peak_probe.py",
+        # --out 由 execute() 统一按 target 注入，避免与校验路径不一致
         "args": ["--tag", "local", "--asset", "bench-6m", "--arms", "single,w16,w32",
-                 "--slots", "12,16,20,21,22,23", "--slot-guard",
-                 "--out", "reports/benchmarks/v06-monitoring/local-probe.jsonl"],
+                 "--slots", "12,16,20,21,22,23", "--slot-guard"],
         "hours": {12, 16, 20, 21, 22, 23},
         "timeout": 1800,
         "out_style": "file",
@@ -94,6 +121,7 @@ TASKS: dict[str, dict] = {
         "sha_field": None,
         "needs": ["config/bench-assets.yaml"],
         "origin": True,
+        "resources": ["link:local-hk", "out:v06-monitoring"],
         "smoke_args": ["--tag", "local", "--asset", "bench-6m", "--arms", "single", "--force"],
         "purpose": "本机三臂探针（single/w16/w32）",
     },
@@ -111,6 +139,8 @@ TASKS: dict[str, dict] = {
         "sha_field": None,
         "needs": [],
         "origin": False,
+        # 与正式实验共用本机↔香港出口（回传目的地同在香港），因此同样受链路锁约束
+        "resources": ["link:local-hk", "ssh:cn2", "out:v06-monitoring"],
         "smoke_args": ["--host", os.environ.get("POOL_CN2_HOST", "160.202.47.187"),
                        "--user", os.environ.get("POOL_CN2_USER", "root")],
         "purpose": "CN2 探测机结果回收（只增不改）",
@@ -341,6 +371,42 @@ def in_window(task: dict, moment: dt.datetime) -> bool:
     return hours is None or moment.hour in hours
 
 
+def strip_out(args: list[str]) -> list[str]:
+    """移除任务定义里已有的 --out（统一由 execute() 按 target 注入）。"""
+    out, skip = [], False
+    for arg in args:
+        if skip:
+            skip = False
+            continue
+        if arg == "--out":
+            skip = True
+            continue
+        if arg.startswith("--out="):
+            continue
+        out.append(arg)
+    return out
+
+
+def out_target(task: dict, target: pathlib.Path) -> str:
+    """dir 型任务传目录（脚本自己拼 runs.jsonl），file 型任务传文件。"""
+    return str(target.parent if task["out_style"] == "dir" else target)
+
+
+def run_telemetry(rid: str) -> dict:
+    """正式实验前的链路遥测（RTT/TCP/TLS/TTFB），失败只降级分类，不阻断实验。"""
+    script = pathlib.Path(__file__).resolve().parent / "net_telemetry.py"
+    out = TELEMETRY_DIR / f"{rid}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        proc = subprocess.run([sys.executable, "-X", "utf8", str(script), "--out", str(out)],
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=90)
+    except Exception as exc:  # noqa: BLE001 - 遥测失败不得伪装成功
+        return {"ok": False, "error": f"{exc.__class__.__name__}: {exc}"}
+    return {"ok": proc.returncode == 0 and out.is_file(), "rc": proc.returncode,
+            "path": str(out), "stderr": (proc.stderr or "").strip()[-200:]}
+
+
 def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
             override: dict | None = None) -> dict:
     override = override or {}
@@ -407,72 +473,99 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
     if not smoke and not in_window(task, started):
         return finish("SKIPPED", f"hour {started.hour} not in {sorted(task['hours'])}")
 
-    problems = precheck(task_name, task, out_dir, override)
-    if problems:
-        log("[PRECHECK-FAIL]\n" + "\n".join(problems))
-        return finish("FAILED", "; ".join(problems)[:400], phase="precheck")
+    # 未获授权的正式实验：即使任务被重新启用也不会产生流量（§4.3）
+    if not smoke and task.get("suspended"):
+        return finish("SKIPPED", f"suspended:{task.get('suspend_reason', '')}"[:400])
 
-    args = list(task["smoke_args"] if smoke else task["args"])
-    if smoke:
-        args += ["--out", str(out_dir if task["out_style"] == "dir" else target)]
-    interpreter = override.get("interpreter", sys.executable)
-    cmd = [interpreter, "-X", "utf8", str(pathlib.Path(override["script"])
-                                         if override.get("script")
-                                         else ROOT / task["script"])] + args
-    if override.get("extra_args"):
-        cmd += list(override["extra_args"])
-
-    before = count_lines(target)
-    log(f"[CMD] {' '.join(cmd)}\n[EXEC] start {now():%H:%M:%S}")
-
-    timeout = float(override.get("timeout", task["timeout"]))
-    t0 = time.perf_counter()
     try:
-        proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=timeout)
-        out, err, rc = proc.stdout, proc.stderr, proc.returncode
-    except subprocess.TimeoutExpired as exc:
+        lock_set = locks.hold(LOCK_DIR, LOCK_JOURNAL, task.get("resources", []),
+                              task_name, rid)
+    except locks.LockConflict as exc:
+        log(f"[LOCK-CONFLICT] {exc.reason()}")
+        return finish("SKIPPED", exc.reason()[:400], phase="lock")
+    except locks.LockError as exc:
+        log(f"[LOCK-ERROR] {exc}")
+        return finish("FAILED", f"lock_error:{exc}"[:400], phase="lock")
+
+    state["locks"] = lock_set.describe()
+    try:
+        problems = precheck(task_name, task, out_dir, override)
+        if problems:
+            log("[PRECHECK-FAIL]\n" + "\n".join(problems))
+            return finish("FAILED", "; ".join(problems)[:400], phase="precheck")
+
+        if task.get("telemetry") and not smoke:
+            tel = run_telemetry(rid)
+            state["telemetry"] = tel
+            log("[TELEMETRY] " + json.dumps(tel, ensure_ascii=False))
+
+        base = list(task["smoke_args"] if smoke else task["args"])
+        args = strip_out(base) + ["--out", out_target(task, target)]
+        state["out_arg"] = out_target(task, target)
+        interpreter = override.get("interpreter", sys.executable)
+        cmd = [interpreter, "-X", "utf8", str(pathlib.Path(override["script"])
+                                             if override.get("script")
+                                             else ROOT / task["script"])] + args
+        if override.get("extra_args"):
+            cmd += list(override["extra_args"])
+
+        before = count_lines(target)
+        log(f"[CMD] {' '.join(cmd)}\n[EXEC] start {now():%H:%M:%S}")
+
+        timeout = float(override.get("timeout", task["timeout"]))
+        t0 = time.perf_counter()
+        try:
+            proc = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=timeout)
+            out, err, rc = proc.stdout, proc.stderr, proc.returncode
+        except subprocess.TimeoutExpired as exc:
+            elapsed = time.perf_counter() - t0
+            log(f"[TIMEOUT] after {elapsed:.1f}s\n{exc.stdout or ''}\n{exc.stderr or ''}")
+            return finish("TIMEOUT", f"timeout after {elapsed:.1f}s")
+        except OSError as exc:
+            log(f"[SPAWN-FAIL] {exc.__class__.__name__}: {exc}")
+            return finish("FAILED", f"spawn_failed:{exc.__class__.__name__}:{exc}")
         elapsed = time.perf_counter() - t0
-        log(f"[TIMEOUT] after {elapsed:.1f}s\n{exc.stdout or ''}\n{exc.stderr or ''}")
-        return finish("TIMEOUT", f"timeout after {elapsed:.1f}s")
-    except OSError as exc:
-        log(f"[SPAWN-FAIL] {exc.__class__.__name__}: {exc}")
-        return finish("FAILED", f"spawn_failed:{exc.__class__.__name__}:{exc}")
-    elapsed = time.perf_counter() - t0
-    log(f"[EXEC] rc={rc} elapsed={elapsed:.1f}s\n--- stdout ---\n{out}\n--- stderr ---\n{err}")
+        log(f"[EXEC] rc={rc} elapsed={elapsed:.1f}s\n--- stdout ---\n{out}\n--- stderr ---\n{err}")
 
-    if rc == 0 and "skip:" in out.lower() and not out.strip().startswith("{"):
-        line = next((l for l in out.splitlines() if "skip:" in l), "skip")
-        return finish("SKIPPED", line[:200], rc_raw=rc)
+        if rc == 0 and "skip:" in out.lower() and not out.strip().startswith("{"):
+            line = next((l for l in out.splitlines() if "skip:" in l), "skip")
+            return finish("SKIPPED", line[:200], rc_raw=rc)
 
-    if rc != 0:
-        tail = (err or out).strip().splitlines()
-        return finish("FAILED", (tail[-1][:300] if tail else f"rc={rc}"), rc_raw=rc,
-                      elapsed_s=round(elapsed, 1))
+        if rc != 0:
+            tail = (err or out).strip().splitlines()
+            return finish("FAILED", (tail[-1][:300] if tail else f"rc={rc}"), rc_raw=rc,
+                          elapsed_s=round(elapsed, 1))
 
-    report = validate_outputs(task, target, before, override.get("corrupt"))
-    state.update(output_files=[report["path"]], record_count=report["new_records"],
-                 sha256_status=("ok" if report["sha_failures"] == 0
-                                else f"fail:{report['sha_failures']}"),
-                 validation=report, elapsed_s=round(elapsed, 1))
-    if not report["ok"]:
-        log("[VALIDATE-FAIL] " + json.dumps(report, ensure_ascii=False))
-        return finish("FAILED", "validation: " + (report["detail"][0] if report["detail"]
-                                                  else f"bad_json={report['bad_json']} "
-                                                       f"sha_fail={report['sha_failures']}"))
-    if report["new_records"] == 0 and not smoke and not task.get("allow_empty"):
-        return finish("FAILED", "no_new_records_in_window")
+        report = validate_outputs(task, target, before, override.get("corrupt"))
+        state.update(output_files=[report["path"]], record_count=report["new_records"],
+                     sha256_status=("ok" if report["sha_failures"] == 0
+                                    else f"fail:{report['sha_failures']}"),
+                     validation=report, elapsed_s=round(elapsed, 1))
+        if not report["ok"]:
+            log("[VALIDATE-FAIL] " + json.dumps(report, ensure_ascii=False))
+            return finish("FAILED", "validation: " + (report["detail"][0] if report["detail"]
+                                                      else f"bad_json={report['bad_json']} "
+                                                           f"sha_fail={report['sha_failures']}"))
+        if report["new_records"] == 0 and not smoke and not task.get("allow_empty"):
+            return finish("FAILED", "no_new_records_in_window")
 
-    dest = f"/srv/pool/labnode/experiment-inbox/{'smoke/' if smoke else ''}{task_name}/{started:%Y-%m-%d}"
-    up = remote_upload([(log_path, log_path.name),
-                        (state_path, state_path.name),
-                        (target, f"{rid}-{target.name}")], dest)
-    state["upload_status"] = ("ok" if up["ok"] else
-                              ("skipped:" + up["detail"] if not up["enabled"] else "failed:" + up["detail"]))
-    log("[UPLOAD] " + json.dumps(up, ensure_ascii=False))
-    if up["enabled"] and not up["ok"]:
-        return finish("PARTIAL", f"upload:{up['detail']}", upload=up)
-    return finish("SUCCESS", f"records+{report['new_records']}", upload=up)
+        uploads = [(log_path, log_path.name),
+                   (state_path, state_path.name),
+                   (target, f"{rid}-{target.name}")]
+        tel_path = state.get("telemetry", {}).get("path")
+        if tel_path and pathlib.Path(tel_path).is_file():
+            uploads.append((pathlib.Path(tel_path), f"{rid}-telemetry.json"))
+        dest = f"/srv/pool/labnode/experiment-inbox/{'smoke/' if smoke else ''}{task_name}/{started:%Y-%m-%d}"
+        up = remote_upload(uploads, dest)
+        state["upload_status"] = ("ok" if up["ok"] else
+                                  ("skipped:" + up["detail"] if not up["enabled"] else "failed:" + up["detail"]))
+        log("[UPLOAD] " + json.dumps(up, ensure_ascii=False))
+        if up["enabled"] and not up["ok"]:
+            return finish("PARTIAL", f"upload:{up['detail']}", upload=up)
+        return finish("SUCCESS", f"records+{report['new_records']}", upload=up)
+    finally:
+        lock_set.release()
 
 
 # ---------------------------------------------------------------------------

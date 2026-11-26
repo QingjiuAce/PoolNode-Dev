@@ -57,6 +57,18 @@ def last_window(task: dict, moment: dt.datetime) -> dt.datetime:
     return moment
 
 
+def recent(states: list[dict], now: dt.datetime, hours: int = 24) -> list[dict]:
+    out = []
+    for s in states:
+        try:
+            end = dt.datetime.fromisoformat(s.get("end_time") or s.get("start_time") or "")
+        except ValueError:
+            continue
+        if dt.timedelta(0) <= now - end <= dt.timedelta(hours=hours):
+            out.append(s)
+    return out
+
+
 def evaluate(now: dt.datetime) -> dict:
     findings = []
     for name, task in TASKS.items():
@@ -65,6 +77,14 @@ def evaluate(now: dt.datetime) -> dict:
         entry = {"task": name, "runs": len(states), "status": "UNKNOWN",
                  "consecutive_failures": 0, "last_success": None, "last_run": None,
                  "issues": []}
+
+        if task.get("suspended"):
+            # 暂停是显式状态，不是"最近没跑"：不参与总体级别，也不制造 missed_windows
+            entry["issues"].append({"level": "INFO", "code": "suspended",
+                                    "detail": task.get("suspend_reason", "已暂停")})
+            entry["status"] = "SUSPENDED"
+            findings.append(entry)
+            continue
 
         if not script.is_file():
             entry["issues"].append({"level": "CRITICAL", "code": "script_missing",
@@ -104,6 +124,22 @@ def evaluate(now: dt.datetime) -> dict:
                 entry["issues"].append({"level": "WARNING", "code": "task_failed",
                                         "detail": (states[-1].get("error_summary") or "")[:160],
                                         "run_id": states[-1].get("run_id")})
+
+            # 调度互斥冲突（§2.4 第 6/7 条）：单次可见，重复出现说明窗口真的重叠
+            conflicts = [s for s in recent(states, now, hours=24)
+                         if str(s.get("error_summary", "")).startswith("lock_conflict")]
+            entry["lock_conflicts_24h"] = len(conflicts)
+            if len(conflicts) >= 2:
+                entry["issues"].append({
+                    "level": "WARNING", "code": "repeated_lock_conflict",
+                    "detail": f"24h 内 {len(conflicts)} 次锁冲突；最后一次："
+                              f"{(conflicts[-1].get('error_summary') or '')[:160]}",
+                    "run_id": conflicts[-1].get("run_id")})
+            elif conflicts:
+                entry["issues"].append({
+                    "level": "INFO", "code": "lock_conflict",
+                    "detail": (conflicts[-1].get("error_summary") or "")[:160],
+                    "run_id": conflicts[-1].get("run_id")})
 
             successes = [s for s in states if s.get("status") == "SUCCESS"]
             if successes:
