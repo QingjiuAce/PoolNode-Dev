@@ -24,14 +24,16 @@
 | D4 | 全部任务共用同一家宽链路，却只有"错开 10 分钟"的假设 | 高 | 已加跨进程互斥锁 |
 | D5 | `PoolSmokeTest` 未纳入安装脚本（实测烟测跑进了旧 worktree） | 中 | 已修复 |
 | D6 | 正式运行不校验代码是否已提交（commit 无法标识实际代码） | 中 | 已加 `code_dirty` 门 |
+| D7 | 上传到远端的状态文件在 `finish()` 之前生成，永远写着 `RUNNING` | 中 | 已修复（先落终态再上传；远端为 `SUCCESS` + `upload_status: pending`） |
+| D8 | 本轮自引入的回归：`state["locks"]` 被错误缩进到 `except` 分支，成功运行不记录锁 | 中 | 已修复；新增端到端集成测试守住该字段 |
 
 ## 二、Git 与环境
 
 | 项 | 值 |
 |---|---|
 | 本任务分支 | `fix/experiment-scheduling-guard` |
-| 实现提交 | `e7f6906` |
-| 报告提交 | `f4065f8` |
+| 实现提交 | `e7f6906`（互斥与输出绑定）、`00edcd5`（分类判据）、`08efabf`（上传终态）、`68363ce`（锁状态落盘） |
+| 报告提交 | `f4065f8` 及后续报告提交 |
 | 基线（恢复） | `0d1a522`（未改动） |
 | 本任务 worktree | `F:\鲸鲸\GitHub\开源二创\Pool-guard` |
 | 其他 worktree | `Pool`=`4cb8b04`、`Pool-experiment`=`0d1a522`、`Pool-investigate`=`98a4e0a`、`Pool-main`=`4f3dbad`，全部未切换/未改动 |
@@ -87,7 +89,7 @@
 | 无死锁/残留 | 排序获取；内核在进程死亡时释放，无年龄启发式 |
 
 验收：26 个新单测（含异常退出释放、部分获取回滚、陈旧元数据不阻塞），
-全量 **294 passed / 1 skipped**（基线 268/1，+26 全部为新增）；
+全量 **297 passed / 1 skipped**（基线 268/1，+29 全部为新增）；
 真实双进程实测 `cmin` 被 `probe` 拒绝并记 `SKIPPED: lock_conflict: ... pid=44928`；
 `PoolSmokeTest` 经 Task Scheduler 触发 5/5 SUCCESS，锁全部成对 acquired/released。
 
@@ -165,7 +167,10 @@
 | 01:17:44 | 双进程争用：`cmin` 被 `probe` 拒绝（`lock_conflict`，rc=3） | 符合设计 |
 | 01:25:01 | `PoolRCv05` 正式触发 → `SKIPPED: hour 1 not in [20,21,22,23]` | 正确 |
 | 01:35:01 | `PoolRCm` 正式触发 → `SKIPPED: hour 1 not in [20,21,22,23]` | 正确 |
-| 01:50 / 02:05 | 健康检查 / 探针（见 §十一 触发器跟踪） | — |
+| 01:50:00 | `PoolHealthCheck` 正式触发 → rc=0，总体 OK | 通过 |
+| 01:53:44 | 远端收件箱状态文件为 `RUNNING`（上传早于终态写入） | 已修复（D7） |
+| 01:55:23 | 自测发现成功运行的状态里没有 `locks`（缩进错误） | 已修复（D8）+ 集成测试 |
+| 02:05:01 | `PoolProbeV05` 正式触发（见 §十一） | — |
 
 无伪成功、无窗口外采样、无生产变更。
 
@@ -243,4 +248,4 @@ reports/experiments/PN-EXPERIMENT-01/
 
 代码与测试：`scripts/experiment/{locks,net_telemetry,window_class}.py`（新增）、
 `runner.py`/`health.py`/`install_tasks.ps1`（修改）、`scripts/{cmin_experiment,collect_box_probe}.py`（小改）、
-`tests/test_experiment_scheduling.py`（26 例）。
+`tests/test_experiment_scheduling.py`（29 例）。

@@ -61,11 +61,11 @@ acquire(resources):
 
 ## 4. 验收证据
 
-### 4.1 单元测试（新增 25 例）
+### 4.1 单元测试（新增 29 例）
 
 ```
 $ python -m pytest tests/test_experiment_scheduling.py -q
-25 passed
+29 passed
 ```
 
 覆盖：并发冲突、异常退出释放、部分获取回滚、幂等释放、陈旧元数据、
@@ -77,10 +77,10 @@ cmin 挂起、锁冲突 → SKIPPED、CRLF 前缀、真实分歧拒绝、种子�
 
 ```
 $ python -m pytest tests/ -q
-293 passed, 1 skipped
+297 passed, 1 skipped
 ```
 
-相对恢复基线 `268 passed / 1 skipped` **+25 passed**，正好等于新增用例数；
+相对恢复基线 `268 passed / 1 skipped` **+29 passed**，正好等于新增用例数；
 无既有用例被修改或删除。
 
 ### 4.3 真实双进程争用（非模拟）
@@ -129,7 +129,7 @@ cmin_exit=3
 | `scripts/experiment/install_tasks.ps1` | 纳入 `PoolSmokeTest`；默认保持 C_MIN 禁用；`-EnableCmin` 显式开关 |
 | `scripts/collect_box_probe.py` | CRLF/LF 归一化前缀比较（只追加尾部） |
 | `scripts/cmin_experiment.py` | 显式随机种子 + `seed`/`seq` 字段 |
-| `tests/test_experiment_scheduling.py` | 新增 25 例 |
+| `tests/test_experiment_scheduling.py` | 新增 29 例 |
 
 ## 6. 未覆盖范围（如实声明）
 
