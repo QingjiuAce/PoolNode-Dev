@@ -275,9 +275,32 @@ def test_classify_unknown_without_probe():
 def test_classify_conflicting_evidence_is_unknown():
     when = dt.datetime(2026, 11, 27, 21, 15, tzinfo=BJ)
     rows = [_probe("2026-11-27T21:05:01+08:00", 30.0)]
-    out = wc.classify(rows, {"ping_origin": {"loss_pct": 60},
+    out = wc.classify(rows, {"ts": "2026-11-27T21:14:00+08:00",
+                             "ping_origin": {"loss_pct": 60},
                              "head": {"value": {"ttfb_ms": 5000}}}, when)
     assert out["verdict"] == "UNKNOWN"
+    assert out["telemetry"]["fresh"] is True
+
+
+def test_single_stream_collapse_is_degraded_even_if_median_is_fine():
+    """11-25 21:05 的真实形态：w32 17 Mbps，single 0.87 Mbps。"""
+    when = dt.datetime(2026, 11, 25, 21, 15, tzinfo=BJ)
+    rows = [{"ts": "2026-11-25T21:05:03+08:00", "tag": "local", "host": "h",
+             "arms": [{"arm": "single", "mbps": 0.87}, {"arm": "w16", "mbps": 9.37},
+                      {"arm": "w32", "mbps": 17.33}]}]
+    out = wc.classify(rows, None, when)
+    assert out["verdict"] == "DEGRADED"
+    assert out["probe"]["single_mbps"] == 0.87
+
+
+def test_stale_telemetry_is_ignored():
+    when = dt.datetime(2026, 11, 25, 21, 15, tzinfo=BJ)
+    rows = [_probe("2026-11-25T21:05:01+08:00", 18.0)]
+    tel = {"ts": "2026-11-27T01:40:00+08:00", "ping_origin": {"loss_pct": 60},
+           "head": {"value": {"ttfb_ms": 5000}}}
+    out = wc.classify(rows, tel, when)
+    assert out["verdict"] == "HEALTHY"
+    assert out["telemetry"]["fresh"] is False
 
 
 def test_classify_event_tail_after_degraded_slot():
