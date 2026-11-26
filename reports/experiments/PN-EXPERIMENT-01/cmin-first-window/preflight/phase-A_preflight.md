@@ -190,19 +190,31 @@ ECDSA `Yk3l…`、RSA `/UsDy…` 同样三方一致。
    （3 个文件上传 + 远端 SHA 核对通过）；
 4. 测试：`302 passed / 1 skipped`（新增"只有 key 没有 password 不得 KeyError"用例）。
 
-### 仍未恢复：CN2（不影响本窗口，但影响 23:40 同步）
+### CN2 也已恢复（02:31 复核）
 
-`ssh hk`（CN2 `160.202.47.187`）现在报：
+用户恢复公钥后实测：
 
 ```
-Offering public key: id_ed25519_zcode SHA256:yX+U6yZplqz8JN3Ym2z+xSN+6k47Ccwfw89DfyDESFE
-root@160.202.47.187: Permission denied (publickey,password).
+host=ser654121548140    boot=2026-11-27 02:03:53    uptime_s=1654
+ssh-keygen -lf ssh_host_ed25519_key.pub → SHA256:F2PhHqAj…rdg   （= 线上值，一致）
+crontab: 5 * * * * … peak_probe.py --tag cn2box --slots 12,16,20,21,22,23
+         --window 2026-11-25T00:00/2027-12-31T23:59 --slot-guard --enforce-window
+/root/pool-probe/probe-results-v06.jsonl → 12 行，最后写入 11-26 23:05（下一档 12:05 才采）
 ```
 
-- CN2 三个主机密钥也全部变更（ed25519 `F2Ph…`），且我们的公钥不再被接受；
-- 即 CN2 很可能也被重建/重置过（与本机维护同一时段）；
-- 影响：今晚 `PoolProbeSync` 会 fail-closed（CN2 数据只增，修复后一次补齐）；
-  **不影响** C_MIN 窗口本身（窗口只写香港收件箱，CN2 仅作独立参照）。
+采集器端到端演练（`--out` 指向临时文件，**不碰正式归档**）：
+
+```
+OK collected lines=12 (+12) sha=0cc764ffefa43c3b
+→ 拉取 12 行、39805 字节，SHA 与远端文件一致
+```
+
+两台机器的重启时刻只差 34 秒（CN2 `02:03:53` / HK `02:04:27`），
+指向**同一次机房/服务商维护**。CN2 的三个主机密钥同样与机内一致
+（`F2Ph…` / `1ltG…` / `KMRi…`）。
+
+今晚 23:40 的 `PoolProbeSync` 可以正常工作；它会把 11-26 的 6 条新记录
+追加进 `cn2box-probe.jsonl`（历史 6 行字节不变），这是采集器的正常增量行为。
 
 ## A7. 阶段 A 判定
 
@@ -214,7 +226,7 @@ root@160.202.47.187: Permission denied (publickey,password).
 | A3 实验矩阵 | PASS（20 对，与协议一致；128K 的 w16 实为 13 块已注明） |
 | A4 流量预算 | **CONDITIONAL**（最坏 124.4 MB > 120 MB；配额余量充足，需确认口径） |
 | A5 调度门控 | PASS（一次性授权 + 双保险 + 无补跑） |
-| A6 生产身份 | **PASS（HK 已重置并复验）**；CN2 访问未恢复（不影响本窗口） |
+| A6 生产身份 | **PASS**（HK 与 CN2 的主机密钥都 = 机内值；上传/拉取均实测通过） |
 
-**阶段 A：HK 侧通过；CN2 侧单独记为 BLOCKED。**
-是否进入阶段 B/C 取决于用户对预算口径与运行条件的确认。
+**阶段 A：全部通过。** 剩余两项不是技术问题，而是授权确认：
+预算口径（124.4 MB 最坏 vs 120 MB 上限）与运行条件（电源/登录/不休眠）。
