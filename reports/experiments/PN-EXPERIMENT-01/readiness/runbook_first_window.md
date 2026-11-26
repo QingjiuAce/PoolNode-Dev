@@ -68,9 +68,10 @@ python -X utf8 scripts\experiment\runner.py --task probe
 同一窗口第二次 → `SKIPPED: authorization_already_consumed:<run_id>`；
 计划流量 > `max_bytes` → `FAILED: budget_exceeds_authorization`（**不消费授权**）。
 
-> 注意：`test_cmin_is_suspended_and_off_plan_hour_removed` 断言 `suspended is True`。
-> 解除挂起时该用例必须同步改为断言 `False`（保留"hours 不含 1"的断言），
-> 否则测试会拦下你——这是有意的防误改设计。
+> 说明：`suspended` 只是运维开关（防误触发）；真正的门是授权文件 +
+> `requires_authorization`。测试 `test_cmin_off_plan_hour_removed_and_authorization_required`
+> 固定住"1 点档不在计划内"和"必须走授权"两条不变量。
+> 授权窗口跑完后 runner 会**自动禁用** `PoolCminExp`（`auto_disable_task`）。
 
 确认三个开关都就位：
 

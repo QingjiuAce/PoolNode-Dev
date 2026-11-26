@@ -72,7 +72,8 @@ def recent(states: list[dict], now: dt.datetime, hours: int = 24) -> list[dict]:
 def evaluate(now: dt.datetime) -> dict:
     findings = []
     for name, task in TASKS.items():
-        states = load_states(name)
+        # 烟测/注入产生的状态不算正式样本：否则一次烟测会把"从未成功"掩盖掉
+        states = [s for s in load_states(name) if not s.get("smoke")]
         script = ROOT / task["script"]
         entry = {"task": name, "runs": len(states), "status": "UNKNOWN",
                  "consecutive_failures": 0, "last_success": None, "last_run": None,
@@ -167,8 +168,21 @@ def evaluate(now: dt.datetime) -> dict:
                         "level": "WARNING", "code": "window_pending",
                         "detail": f"最近成功 {last_ok:%m-%d %H:%M}，本窗口 {expected:%m-%d %H:%M} 尚无成功记录"})
             else:
-                entry["issues"].append({"level": "CRITICAL", "code": "never_succeeded",
-                                        "detail": "有运行记录但从未成功"})
+                # 只有"真的进过窗口"的运行才有资格谈成功/失败；窗口外 SKIPPED 不算
+                eligible = [s for s in states
+                            if not (s.get("status") == "SKIPPED"
+                                    and str(s.get("error_summary", "")).startswith("hour "))]
+                if not eligible:
+                    entry["issues"].append({
+                        "level": "INFO", "code": "no_window_yet",
+                        "detail": "自恢复以来还没有落在采样窗口内的正式运行"})
+                elif task.get("requires_authorization"):
+                    entry["issues"].append({
+                        "level": "WARNING", "code": "awaiting_authorized_window",
+                        "detail": "已配置一次性授权，尚未到（或尚未完成）授权窗口"})
+                else:
+                    entry["issues"].append({"level": "CRITICAL", "code": "never_succeeded",
+                                            "detail": "有窗口内运行记录但从未成功"})
 
         levels = {i["level"] for i in entry["issues"]}
         entry["status"] = ("CRITICAL" if "CRITICAL" in levels else
