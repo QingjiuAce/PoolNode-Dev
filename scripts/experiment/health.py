@@ -78,6 +78,16 @@ def evaluate(now: dt.datetime) -> dict:
             entry["last_run"] = {"run_id": last.get("run_id"), "status": last.get("status"),
                                  "end": last.get("end_time"),
                                  "summary": (last.get("error_summary") or "")[:160]}
+            # 最新一条若一直停在 RUNNING，说明进程被强杀/崩溃
+            if last.get("status") == "RUNNING" and last.get("start_time"):
+                started = dt.datetime.fromisoformat(last["start_time"])
+                limit = task.get("timeout", 1800) + 600
+                if (now - started).total_seconds() > limit:
+                    entry["issues"].append({
+                        "level": "CRITICAL", "code": "stale_running",
+                        "detail": f"run {last.get('run_id')} 自 {started:%m-%d %H:%M} 起停在 RUNNING",
+                        "run_id": last.get("run_id")})
+
             consecutive = 0
             for st in reversed(states):
                 if st.get("status") in FAIL_STATES:

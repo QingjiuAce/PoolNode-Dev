@@ -1,0 +1,640 @@
+{
+  "generated_at": "2026-11-27T00:30:22.822046+08:00",
+  "branch": "fix/experiment-pipeline-recovery",
+  "commit": "d889c18",
+  "smoke_rounds": [
+    {
+      "file": "reports/experiment-logs/smoke\\smoke-summary-20261127T002147.json",
+      "generated_at": "2026-11-27T00:21:47.743559+08:00",
+      "results": {
+        "cmin": {
+          "status": "PARTIAL",
+          "run_id": "smoke-cmin-20261127T001914-d3d4a8",
+          "summary": "upload:remote_conflict:runs.jsonl",
+          "records": 4,
+          "upload": "failed:remote_conflict:runs.jsonl"
+        },
+        "rcv05": {
+          "status": "SUCCESS",
+          "run_id": "smoke-rcv05-20261127T001944-7d66db",
+          "summary": "records+2",
+          "records": 2,
+          "upload": "ok"
+        },
+        "rcmatrix": {
+          "status": "FAILED",
+          "run_id": "smoke-rcmatrix-20261127T002028-5be8f2",
+          "summary": "validation: bad_json=0 sha_fail=0",
+          "records": 3,
+          "upload": "not_attempted"
+        },
+        "probe": {
+          "status": "SUCCESS",
+          "run_id": "smoke-probe-20261127T002044-fc3e81",
+          "summary": "records+1",
+          "records": 1,
+          "upload": "ok"
+        },
+        "sync": {
+          "status": "FAILED",
+          "run_id": "smoke-sync-20261127T002147-eba00d",
+          "summary": "ERROR: remote host and user must be configured explicitly; set --host/--user or POOL_CN2_HOST/POOL_CN2_USER",
+          "records": 0,
+          "upload": "not_attempted"
+        }
+      }
+    },
+    {
+      "file": "reports/experiment-logs/smoke\\smoke-summary-20261127T002539.json",
+      "generated_at": "2026-11-27T00:25:39.138461+08:00",
+      "results": {
+        "cmin": {
+          "status": "SUCCESS",
+          "run_id": "smoke-cmin-20261127T002238-5531fb",
+          "summary": "records+4",
+          "records": 4,
+          "upload": "ok"
+        },
+        "rcv05": {
+          "status": "SUCCESS",
+          "run_id": "smoke-rcv05-20261127T002309-f98db8",
+          "summary": "records+2",
+          "records": 2,
+          "upload": "ok"
+        },
+        "rcmatrix": {
+          "status": "SUCCESS",
+          "run_id": "smoke-rcmatrix-20261127T002355-d2ad0a",
+          "summary": "records+3",
+          "records": 3,
+          "upload": "ok"
+        },
+        "probe": {
+          "status": "SUCCESS",
+          "run_id": "smoke-probe-20261127T002416-bb6971",
+          "summary": "records+1",
+          "records": 1,
+          "upload": "ok"
+        },
+        "sync": {
+          "status": "SUCCESS",
+          "run_id": "smoke-sync-20261127T002531-28451b",
+          "summary": "records+12",
+          "records": 12,
+          "upload": "ok"
+        }
+      }
+    },
+    {
+      "file": "reports/experiment-logs/smoke\\smoke-summary-20261127T002858.json",
+      "generated_at": "2026-11-27T00:28:58.377245+08:00",
+      "results": {
+        "cmin": {
+          "status": "SUCCESS",
+          "run_id": "smoke-cmin-20261127T002631-75024e",
+          "summary": "records+4",
+          "records": 4,
+          "upload": "ok"
+        },
+        "rcv05": {
+          "status": "SUCCESS",
+          "run_id": "smoke-rcv05-20261127T002700-1a800d",
+          "summary": "records+2",
+          "records": 2,
+          "upload": "ok"
+        },
+        "rcmatrix": {
+          "status": "SUCCESS",
+          "run_id": "smoke-rcmatrix-20261127T002739-c621b9",
+          "summary": "records+3",
+          "records": 3,
+          "upload": "ok"
+        },
+        "probe": {
+          "status": "SUCCESS",
+          "run_id": "smoke-probe-20261127T002758-4ede45",
+          "summary": "records+1",
+          "records": 1,
+          "upload": "ok"
+        },
+        "sync": {
+          "status": "SUCCESS",
+          "run_id": "smoke-sync-20261127T002852-7cb4a4",
+          "summary": "records+12",
+          "records": 12,
+          "upload": "ok"
+        }
+      }
+    }
+  ],
+  "runs": [
+    {
+      "task_name": "cmin",
+      "run_id": "inject-missing_script-20261127T001501-752eee",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:15:01.734339+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "script_missing:F:\\鲸鲸\\GitHub\\开源二创\\Pool-experiment\\scripts\\does-not-exist.py"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-bad_interpreter-20261127T001502-f5b071",
+      "status": "RUNNING",
+      "exit_code": null,
+      "start_time": "2026-11-27T00:15:02.506475+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": ""
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-missing_dep-20261127T001503-461342",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:15:03.100984+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "dependency_missing:PyYAML:forced-by-injection"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-offline-20261127T001503-1ae19d",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:15:03.996994+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "origin_unreachable:127.0.0.1:1 ConnectionRefusedError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-bad_interpreter-20261127T001511-40b2e6",
+      "status": "RUNNING",
+      "exit_code": null,
+      "start_time": "2026-11-27T00:15:11.185141+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": ""
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-bad_interpreter-20261127T001525-d823ed",
+      "status": "RUNNING",
+      "exit_code": null,
+      "start_time": "2026-11-27T00:15:25.987019+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": ""
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-bad_interpreter-20261127T001540-68eaf4",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:15:40.709520+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "spawn_failed:FileNotFoundError:[WinError 2] 系统找不到指定的文件。"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-unwritable_out-20261127T001541-2b37c3",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:15:41.301392+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "out_dir_not_writable:[WinError 5] 拒绝访问。: 'C:\\\\Windows\\\\System32\\\\pool-exp-test'"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-timeout-20261127T001541-856f34",
+      "status": "TIMEOUT",
+      "exit_code": 5,
+      "start_time": "2026-11-27T00:15:41.606402+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "timeout after 0.1s"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-duplicate_run_id-20261127T001542-db663a",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:16:11.248783+08:00",
+      "elapsed_s": null,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "duplicate_run_id"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-bad_jsonl-20261127T001627-6a1e6d",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:16:27.397651+08:00",
+      "elapsed_s": 28.4,
+      "record_count": 4,
+      "sha256_status": "ok",
+      "upload_status": "not_attempted",
+      "error_summary": "validation: bad_json=1 sha_fail=0"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-sha_mismatch-20261127T001656-38615b",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:16:56.441321+08:00",
+      "elapsed_s": 24.3,
+      "record_count": 5,
+      "sha256_status": "fail:1",
+      "upload_status": "not_attempted",
+      "error_summary": "validation: bad_json=0 sha_fail=1"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "inject-remote_down-20261127T001721-df8e23",
+      "status": "PARTIAL",
+      "exit_code": 4,
+      "start_time": "2026-11-27T00:17:21.693802+08:00",
+      "elapsed_s": 25.9,
+      "record_count": 4,
+      "sha256_status": "ok",
+      "upload_status": "failed:connect_failed:NoValidConnectionsError",
+      "error_summary": "upload:connect_failed:NoValidConnectionsError"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "smoke-cmin-20261127T001914-d3d4a8",
+      "status": "PARTIAL",
+      "exit_code": 4,
+      "start_time": "2026-11-27T00:19:14.401697+08:00",
+      "elapsed_s": 26.3,
+      "record_count": 4,
+      "sha256_status": "ok",
+      "upload_status": "failed:remote_conflict:runs.jsonl",
+      "error_summary": "upload:remote_conflict:runs.jsonl"
+    },
+    {
+      "task_name": "rcv05",
+      "run_id": "smoke-rcv05-20261127T001944-7d66db",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:19:44.672727+08:00",
+      "elapsed_s": 37.8,
+      "record_count": 2,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+2"
+    },
+    {
+      "task_name": "rcmatrix",
+      "run_id": "smoke-rcmatrix-20261127T002028-5be8f2",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:20:28.181853+08:00",
+      "elapsed_s": 16.3,
+      "record_count": 3,
+      "sha256_status": "ok",
+      "upload_status": "not_attempted",
+      "error_summary": "validation: bad_json=0 sha_fail=0"
+    },
+    {
+      "task_name": "probe",
+      "run_id": "smoke-probe-20261127T002044-fc3e81",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:20:44.779479+08:00",
+      "elapsed_s": 59.1,
+      "record_count": 1,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+1"
+    },
+    {
+      "task_name": "sync",
+      "run_id": "smoke-sync-20261127T002147-eba00d",
+      "status": "FAILED",
+      "exit_code": 1,
+      "start_time": "2026-11-27T00:21:47.503007+08:00",
+      "elapsed_s": 0.1,
+      "record_count": 0,
+      "sha256_status": null,
+      "upload_status": "not_attempted",
+      "error_summary": "ERROR: remote host and user must be configured explicitly; set --host/--user or POOL_CN2_HOST/POOL_CN2_USER"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "smoke-cmin-20261127T002238-5531fb",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:22:38.616898+08:00",
+      "elapsed_s": 26.7,
+      "record_count": 4,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+4"
+    },
+    {
+      "task_name": "rcv05",
+      "run_id": "smoke-rcv05-20261127T002309-f98db8",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:23:09.570943+08:00",
+      "elapsed_s": 42.0,
+      "record_count": 2,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+2"
+    },
+    {
+      "task_name": "rcmatrix",
+      "run_id": "smoke-rcmatrix-20261127T002355-d2ad0a",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:23:55.931475+08:00",
+      "elapsed_s": 16.0,
+      "record_count": 3,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+3"
+    },
+    {
+      "task_name": "probe",
+      "run_id": "smoke-probe-20261127T002416-bb6971",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:24:16.562269+08:00",
+      "elapsed_s": 70.2,
+      "record_count": 1,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+1"
+    },
+    {
+      "task_name": "sync",
+      "run_id": "smoke-sync-20261127T002531-28451b",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:25:31.374555+08:00",
+      "elapsed_s": 4.2,
+      "record_count": 12,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+12"
+    },
+    {
+      "task_name": "cmin",
+      "run_id": "smoke-cmin-20261127T002631-75024e",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:26:31.558162+08:00",
+      "elapsed_s": 25.2,
+      "record_count": 4,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+4"
+    },
+    {
+      "task_name": "rcv05",
+      "run_id": "smoke-rcv05-20261127T002700-1a800d",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:27:00.436567+08:00",
+      "elapsed_s": 35.1,
+      "record_count": 2,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+2"
+    },
+    {
+      "task_name": "rcmatrix",
+      "run_id": "smoke-rcmatrix-20261127T002739-c621b9",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:27:39.540549+08:00",
+      "elapsed_s": 15.0,
+      "record_count": 3,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+3"
+    },
+    {
+      "task_name": "probe",
+      "run_id": "smoke-probe-20261127T002758-4ede45",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:27:58.950298+08:00",
+      "elapsed_s": 48.8,
+      "record_count": 1,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+1"
+    },
+    {
+      "task_name": "sync",
+      "run_id": "smoke-sync-20261127T002852-7cb4a4",
+      "status": "SUCCESS",
+      "exit_code": 0,
+      "start_time": "2026-11-27T00:28:52.377369+08:00",
+      "elapsed_s": 2.5,
+      "record_count": 12,
+      "sha256_status": "ok",
+      "upload_status": "ok",
+      "error_summary": "records+12"
+    }
+  ],
+  "smoke_jsonl": [
+    {
+      "path": "reports/experiment-logs/smoke\\cmin-20261127T001753-789148\\runs.jsonl",
+      "bytes": 2413,
+      "sha256": "b0603a14df5a8d24c0bda439dc3a6bcd03055099221ad2374a407ea9c6ff7561"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\inject-bad_jsonl-20261127T001627-6a1e6d\\runs.jsonl",
+      "bytes": 2409,
+      "sha256": "5601e85c38764be334d631682d37247db6b4ee8e35b6079747fe019314b25ef8"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\inject-duplicate_run_id-20261127T001542-db663a\\runs.jsonl",
+      "bytes": 2416,
+      "sha256": "7210fec292106db1e84e86af75d573d5486889d86773a001184f79d94067a516"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\inject-remote_down-20261127T001721-df8e23\\runs.jsonl",
+      "bytes": 2415,
+      "sha256": "36f705932494bcb047790f5c8c1635751266ec5cf32c897ddc4d5a5178224f2a"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\inject-sha_mismatch-20261127T001656-38615b\\runs.jsonl",
+      "bytes": 2414,
+      "sha256": "e6dd827c73b74612a94ca53ac821b8a2a6b868d8717fd8f718807905b1a0059d"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-cmin-20261127T001914-d3d4a8\\runs.jsonl",
+      "bytes": 2413,
+      "sha256": "cec61d33616be8d5c8fb949fd1065cef5d0de22ec174d71e63dfff45a9f7cd1d"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-cmin-20261127T002238-5531fb\\runs.jsonl",
+      "bytes": 2408,
+      "sha256": "cfcc09abac2d3e59977dd404089a5ffeaeb479afe762f75302c2bb61c1c72a37"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-cmin-20261127T002631-75024e\\runs.jsonl",
+      "bytes": 2407,
+      "sha256": "c2300a3df11c73e264246461624bc28393b9c812c47e4127ad0eae6e5ba0bcf6"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-probe-20261127T002044-fc3e81\\runs.jsonl",
+      "bytes": 359,
+      "sha256": "3574c793276e48ef6f5097314c668cea4e6d482d32dac332f90e112cbcd6fef9"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-probe-20261127T002416-bb6971\\runs.jsonl",
+      "bytes": 354,
+      "sha256": "5ead52f89ae44b9f13ffa2fdd530621188a63077883ec66856deeb69471d8d89"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-probe-20261127T002758-4ede45\\runs.jsonl",
+      "bytes": 354,
+      "sha256": "3d6604624bf9a8f3db60a76ca05b52a2c561656130e10d488145e823a9230c4d"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002028-5be8f2\\metrics\\002033_0_B.jsonl",
+      "bytes": 8961,
+      "sha256": "9951eff63f2aae6050b0ea43d02b0b061abff307c7547c048a71c038e11f5cc9"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002028-5be8f2\\metrics\\002038_0_C.jsonl",
+      "bytes": 11281,
+      "sha256": "a7c37a96b85cf34b87fc65bed7fc43bbce8708287e8f2049c7cea4bb27a33c2b"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002028-5be8f2\\metrics\\002044_0_A.jsonl",
+      "bytes": 4820,
+      "sha256": "3ff03d369c5a104a8b5936859fd94a4c495babed6073c2ca998e7a0201f0db8a"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002028-5be8f2\\runs.jsonl",
+      "bytes": 1642,
+      "sha256": "e67c2449aa572160628cfeb7fc763b616edc5fdfc6a07cb2c58dca144e965b5a"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002355-d2ad0a\\metrics\\002400_0_C.jsonl",
+      "bytes": 11266,
+      "sha256": "3ca02dd7e39d4ee13bf4fb415381bf28797d524575c97c05b42f491d6c828463"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002355-d2ad0a\\metrics\\002407_0_A.jsonl",
+      "bytes": 4827,
+      "sha256": "2bc3a9d1461055458fd9d01492d74f4a218916ea2f72fb735fbbac97a25df593"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002355-d2ad0a\\metrics\\002412_0_B.jsonl",
+      "bytes": 8962,
+      "sha256": "e44a41ac15ea1db85bb09f9584db69d6d9111a146079c78bc4b19f973521e2d1"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002355-d2ad0a\\runs.jsonl",
+      "bytes": 1641,
+      "sha256": "ceff9c025700c47305019cd40ba68803e808be12b0cb5e84362424833b36c6cc"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002739-c621b9\\metrics\\002746_0_A.jsonl",
+      "bytes": 4823,
+      "sha256": "29961efab8e8f6b781ac89a152be73900513b40606aa299c900d0a6d272945ad"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002739-c621b9\\metrics\\002751_0_C.jsonl",
+      "bytes": 11281,
+      "sha256": "ce2ceedc3bf3ef0e0dc9df1231843e6e98aaac068d110bc8d71a9351a638873e"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002739-c621b9\\metrics\\002755_0_B.jsonl",
+      "bytes": 8960,
+      "sha256": "1d7ddf53b85a8f25f7ad7f34093b6224a09ed35db16284c973f1b752482215a6"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcmatrix-20261127T002739-c621b9\\runs.jsonl",
+      "bytes": 1641,
+      "sha256": "13d52b0532b230075551b9f7a127d629f17f7d9b1b2dff352413236dc59beff0"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T001944-7d66db\\metrics\\20261127T001945-4f566b.001.jsonl",
+      "bytes": 1770,
+      "sha256": "df3c82978859283534852b2257dbfacc82bcbf20bdc5a8729abf51ad03e22907"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T001944-7d66db\\metrics\\20261127T001945-4f566b.002.jsonl",
+      "bytes": 4087,
+      "sha256": "1b3725482977f5ac6077d645ef86807314c203d0503746e0750420e9ff8435b7"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T001944-7d66db\\runs.jsonl",
+      "bytes": 959,
+      "sha256": "ca4bf3a1b13e05ce40092e6bde1a057669d3806d0636e23552e29cbd23736dea"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T002309-f98db8\\metrics\\20261127T002309-56d391.001.jsonl",
+      "bytes": 1769,
+      "sha256": "02a03a82dc55e5414633e0fa9ab1f0b3ca35e9f88fbafa9e1c41b19d756e9a03"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T002309-f98db8\\metrics\\20261127T002309-56d391.002.jsonl",
+      "bytes": 4093,
+      "sha256": "df73975e2a4d305a09d1cdeb15ff44163804c17a8560dab3569e498dd81d6a72"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T002309-f98db8\\runs.jsonl",
+      "bytes": 960,
+      "sha256": "74c67fd846bc4af43dc2b6b6517ab593076deaef3110323f649b25ed01322d36"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T002700-1a800d\\metrics\\20261127T002700-06d387.001.jsonl",
+      "bytes": 1772,
+      "sha256": "576f2cf3fe194eec95667e009857ae0301792b6ae90d330487650e899f6a4c12"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T002700-1a800d\\metrics\\20261127T002700-06d387.002.jsonl",
+      "bytes": 4087,
+      "sha256": "5bfad0c93af706b3f74e8a80021fbedd31081c0b157c0dd7ea691597b5d195be"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-rcv05-20261127T002700-1a800d\\runs.jsonl",
+      "bytes": 960,
+      "sha256": "75e18a8119c8625dc03214d109c03abb9604692d23cafcacc56cb69628a6575b"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-sync-20261127T002531-28451b\\runs.jsonl",
+      "bytes": 39805,
+      "sha256": "0cc764ffefa43c3b3cee391c5648c384a879588e8d0403b9859a5fca9beab494"
+    },
+    {
+      "path": "reports/experiment-logs/smoke\\smoke-sync-20261127T002852-7cb4a4\\runs.jsonl",
+      "bytes": 39805,
+      "sha256": "0cc764ffefa43c3b3cee391c5648c384a879588e8d0403b9859a5fca9beab494"
+    }
+  ]
+}
