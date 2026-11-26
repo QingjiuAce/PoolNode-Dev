@@ -142,6 +142,20 @@
 | CN2 积压 | `cn2-backlog/records/*.jsonl` | 清单内逐行 SHA-256 |
 | 历史正式数据 | `reports/benchmarks/*` | `git diff` 为空（未改动） |
 
+### 8.1 生产环境（只读核对，01:51）
+
+| 检查 | 结果 |
+|---|---|
+| `systemctl is-active nginx` | `active` |
+| nginx `NRestarts` | **0**（未重启） |
+| `/srv/pool/data` 文件数 | **44** |
+| `/srv/pool/data` 文件字节总和 | **117 549 350**（与恢复阶段记录一致） |
+| 最近修改时间 | 最新为 **2026-11-22**；11-26 之后无任何文件变动 |
+| 回传落点 | 仅 `/srv/pool/labnode/experiment-inbox/smoke/`（不在公开根下） |
+
+说明：`du -sb` 会多出 20 480 字节（5 个目录的 4 KiB 块），
+比对时必须用"文件字节总和"，不是 `du` 输出。
+
 ## 九、异常与失败记录（本轮全部）
 
 | 时间 | 事件 | 判定 |
@@ -178,7 +192,7 @@
 | 01:14:36 | PoolSmokeTest | rc=0 | 新代码，5/5 SUCCESS |
 | 01:25:01 | PoolRCv05 | rc=3 | 新代码，窗口外 |
 | 01:35:01 | PoolRCm | rc=3 | 新代码，窗口外 |
-| 01:50:00 | PoolHealthCheck | 见下方追加 | — |
+| 01:50:00 | PoolHealthCheck | rc=0 | overall OK；cmin=SUSPENDED |
 | 02:05:01 | PoolProbeV05 | 见下方追加 | 窗口外应为 rc=3 |
 
 ## 十二、判定表（§6.1）

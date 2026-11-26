@@ -94,6 +94,23 @@ asset / path / size / order / arms[]`。**没有 `run_id` 字段**——这是 C
 `manifest.json` 摘要：`records=12, new_vs_archive=6, duplicate_of_archive=6,
 all_sha_ok=true, merged_into_formal_archive=false`。
 
+### 5.1 正式同步演练（临时副本，未触碰真实归档）
+
+把真实归档复制到临时目录，用修复后的 `merge_append` 喂入远端 12 行：
+
+```
+added lines: 6
+prefix bytes unchanged: True        # 原 6 行字节不变
+real archive untouched: True        # 真实文件 SHA 不变
+archive before/after bytes: 7762 → 39811
+equals remote bytes: False          # 39811 vs 39805
+```
+
+最后一行差异（+6 字节）来自"历史 6 行仍是 CRLF、新追加 6 行是 LF"。
+也就是说修复后的归档与远端**内容一致、字节不一致**。这是刻意选择：
+不重写历史字节。代价是今后每次同步都依赖按行归一化比较，且 `git add` 该文件时
+Git 会按 `core.autocrlf` 归一化——不影响 JSONL 解析与 SHA 校验（校验的是远端载荷）。
+
 后续：下一次计划同步（`PoolProbeSync` 23:40）会在修复后的采集器上自动追加这 6 条，
 无需人工干预；届时正式归档从 6 条变 12 条，历史 6 行不变。
 

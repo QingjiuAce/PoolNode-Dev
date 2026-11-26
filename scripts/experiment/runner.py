@@ -574,6 +574,11 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         if tel_path and pathlib.Path(tel_path).is_file():
             uploads.append((pathlib.Path(tel_path), f"{rid}-telemetry.json"))
         dest = f"/srv/pool/labnode/experiment-inbox/{'smoke/' if smoke else ''}{task_name}/{started:%Y-%m-%d}"
+        # 上传前先落"最终状态"：否则远端归档里的状态文件永远是 RUNNING
+        state.update(status="SUCCESS", exit_code=EXIT["SUCCESS"],
+                     end_time=now().isoformat(), upload_status="pending")
+        write_json(state_path, state)
+        log("[UPLOAD] start " + dest)
         up = remote_upload(uploads, dest)
         state["upload_status"] = ("ok" if up["ok"] else
                                   ("skipped:" + up["detail"] if not up["enabled"] else "failed:" + up["detail"]))

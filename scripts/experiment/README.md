@@ -111,9 +111,13 @@ reports/experiment-logs/
 
 状态字段：`task_name / run_id / start_time / end_time / exit_code / status /
 branch / commit / script_version / output_files / record_count / sha256_status /
-upload_status / error_summary / validation`。
+upload_status / error_summary / validation / locks / code_dirty`。
 
-`SKIPPED` 与 `SUCCESS` 严格区分：窗口外、脚本自身输出 `skip:` 都会记为 SKIPPED。
+`SKIPPED` 与 `SUCCESS` 严格区分：窗口外、脚本自身输出 `skip:`、锁冲突都会记为 SKIPPED。
+
+远端收件箱里的状态文件是**上传前**的快照（`upload_status: pending`）；
+回传结果以上传后本地重写的状态文件与日志里的 `[UPLOAD]` 行为准。
+上传器是"同名同内容跳过、同名异内容报错"，因此不重复上传同一个文件。
 
 ## 回传（可选）
 
