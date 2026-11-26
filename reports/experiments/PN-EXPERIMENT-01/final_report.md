@@ -118,7 +118,7 @@
 | 预算 | 71.1 MB / 窗口（建议批准上限 120 MB） |
 | 预检 | ✅ `precheck(formal)` 返回空；锁可获取；`code_dirty=[]` |
 | 授权 | ❌ **未提供**（日期/窗口/流量上限） |
-| 实际流量 | **0**（cmin 任务自 01:05:37 起禁用；`suspended` 双保险） |
+| 实际流量 | **0**：`PoolCminExp` 自 01:05:37 禁用；01:15 / 02:15 均未触发；状态目录无任何 `smoke=false` 的 cmin 记录 |
 
 ### 授权申请（待确认）
 
@@ -198,7 +198,11 @@
 | 01:25:01 | PoolRCv05 | rc=3 | 新代码，窗口外 |
 | 01:35:01 | PoolRCm | rc=3 | 新代码，窗口外 |
 | 01:50:00 | PoolHealthCheck | rc=0 | overall OK；cmin=SUSPENDED |
-| 02:05:01 | PoolProbeV05 | 见下方追加 | 窗口外应为 rc=3 |
+| 02:05:01 | PoolProbeV05 | rc=3 | `SKIPPED: hour 2 not in [12,16,20,21,22,23]` |
+
+`PoolCminExp` 自 01:05:37 禁用后：`State=Disabled`、`LastRunTime` 仍为 00:15:01
+（旧入口的值），01:15 与 02:15 两次触发均未发生；状态目录中**没有**任何
+`smoke=false` 的 cmin 运行记录——即本轮 C_MIN 正式流量为 0。
 
 ## 十二、判定表（§6.1）
 
@@ -242,7 +246,8 @@ reports/experiments/PN-EXPERIMENT-01/
 │   ├── phase-1_scheduling_review.md
 │   └── phase-1_isolation_implementation.md
 ├── readiness/
-│   └── phase-2_cmin_readiness.md
+│   ├── phase-2_cmin_readiness.md
+│   └── runbook_first_window.md
 └── final_report.md
 ```
 
