@@ -195,6 +195,34 @@ def test_dirty_code_blocks_formal_but_not_smoke(monkeypatch):
     assert not any(p.startswith("code_dirty") for p in smoke)
 
 
+def test_execute_records_locks_and_uses_the_validated_path(monkeypatch, tmp_path):
+    """一次真实执行：锁必须写进状态，--out 必须落在校验的同一个文件上。"""
+    _dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "code_dirty", lambda: [])
+    monkeypatch.setattr(runner, "REMOTE_CONF", tmp_path / "no-remote.json")
+    script = tmp_path / "fake_task.py"
+    script.write_text(
+        "import argparse, json, pathlib\n"
+        "ap = argparse.ArgumentParser(); ap.add_argument('--out'); a = ap.parse_args()\n"
+        "p = pathlib.Path(a.out); p.parent.mkdir(parents=True, exist_ok=True)\n"
+        "p.write_text(json.dumps({'ts': '2026-11-27T12:15:00', 'arm': 'B', 'round': 0}) + '\\n')\n",
+        encoding="utf-8")
+    task = dict(runner.TASKS["rcv05"])
+    task.update(script=str(script), args=[], smoke_args=[], suspended=False,
+                out_style="file", output=str(tmp_path / "out" / "runs.jsonl"))
+    fixed = dt.datetime(2026, 11, 27, 20, 25, tzinfo=BJ)
+    monkeypatch.setattr(runner, "now", lambda: fixed)
+    st = runner.execute("rcv05", task, "rcv05-locks-test",
+                        override={"skip_origin": True})
+    assert st["status"] == "SUCCESS", st
+    assert {item["resource_id"] for item in st["locks"]} == {"link:local-hk", "out:v05-rc1"}
+    assert pathlib.Path(st["out_arg"]) == pathlib.Path(task["output"])
+    saved = json.loads((runner.STATE_DIR / "rcv05" / "rcv05-locks-test.json")
+                       .read_text(encoding="utf-8"))
+    assert saved["status"] == "SUCCESS"
+    assert {item["resource_id"] for item in saved["locks"]} == {"link:local-hk", "out:v05-rc1"}
+
+
 # --------------------------------------------------------------------------
 # 采集器：CRLF 历史归档仍可增量，且历史字节不变
 # --------------------------------------------------------------------------

@@ -501,10 +501,10 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         log(f"[LOCK-ERROR] {exc}")
         return finish("FAILED", f"lock_error:{exc}"[:400], phase="lock")
 
-        state["locks"] = lock_set.describe()
-        state["code_dirty"] = [] if smoke else code_dirty()[:20]
-        if state["code_dirty"]:
-            write_json(state_path, state)
+    state["locks"] = lock_set.describe()
+    state["code_dirty"] = [] if smoke else code_dirty()[:20]
+    if state["code_dirty"]:
+        write_json(state_path, state)
     try:
         problems = precheck(task_name, task, out_dir, override, formal=not smoke)
         if problems:
