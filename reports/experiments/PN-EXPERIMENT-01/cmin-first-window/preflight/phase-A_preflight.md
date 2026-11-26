@@ -180,6 +180,24 @@ worker 组各一对），与 phase-4 预算算式 `2 C_MIN × 4 臂 × 5 组 × 
 - 02:01 的**重启本身就是未预告的生产变更**（nginx 已自愈且数据完好，但按 §9 必须上报）；
 - 我**没有**向任何未验证主机发送密码：paramiko 在校验失败时不会进入认证阶段。
 
+### 两个盒子都受影响
+
+CN2 `160.202.47.187` 同样三个密钥全部变更：
+
+| 类型 | 本机 `known_hosts` 记录 | 当前实际 |
+|---|---|---|
+| ed25519 | `SHA256:ouXt4b//…r+E` | `SHA256:F2PhHqAj…rdg` |
+| ecdsa | `SHA256:5odfCp7a…VJc` | `SHA256:1ltGYz4S…3Lo` |
+| rsa | `SHA256:k4zEE/C/…BlCE` | `SHA256:KMRixmml…XPY` |
+
+后果（除上传外）：
+
+- `PoolProbeSync`（每日 23:40）用 `ssh/scp` + `BatchMode` + 默认 `known_hosts`，
+  今晚会因主机密钥不符而失败（fail-closed，不会写坏归档；CN2 侧数据仍只增，
+  修复后一次补齐）。
+- 本机 `~/.ssh/known_hosts` 在 02:16–02:17 被某个 OpenSSH 客户端动作改写
+  （出现 `known_hosts.old`，新增了 HK 的 ecdsa/rsa 条目）；该文件不参与上传器校验。
+
 ### 解除条件（任一）
 
 1. 你在云控制台/VNC 里执行 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`，把指纹发我核对
