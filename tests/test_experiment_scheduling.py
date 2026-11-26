@@ -156,18 +156,22 @@ def test_rcmatrix_never_writes_into_other_worktree():
 # --------------------------------------------------------------------------
 # 未授权的 C_MIN 不得产生流量
 # --------------------------------------------------------------------------
-def test_cmin_is_suspended_and_off_plan_hour_removed():
+def test_cmin_off_plan_hour_removed_and_authorization_required():
+    """1 点档不属于计划；真正的门是"单次授权"，suspended 只是运维开关。"""
     task = runner.TASKS["cmin"]
-    assert task["suspended"] is True
     assert 1 not in task["hours"]
     assert task["hours"] == {12, 20, 21, 22, 23}
+    assert task["requires_authorization"] is True
+    assert isinstance(task["suspended"], bool)
 
 
 def test_execute_refuses_suspended_task(monkeypatch, tmp_path):
     _dirs(monkeypatch, tmp_path)
     fixed = dt.datetime(2026, 11, 27, 12, 15, tzinfo=BJ)
     monkeypatch.setattr(runner, "now", lambda: fixed)
-    st = runner.execute("cmin", runner.TASKS["cmin"], "cmin-suspended-test")
+    task = dict(runner.TASKS["cmin"])
+    task["suspended"] = True          # 机制测试：与当前运行期开关无关
+    st = runner.execute("cmin", task, "cmin-suspended-test")
     assert st["status"] == "SKIPPED"
     assert "suspended" in st["error_summary"]
 
@@ -476,6 +480,7 @@ def _recorder_task(tmp_path, *, stopped: bool, exit_code: int):
     task = dict(runner.TASKS["cmin"])
     task.update(script=str(script), args=[], smoke_args=[], suspended=False,
                 telemetry=False, hours={12}, requires_authorization=True,
+                auto_disable_task="PoolCminExp",
                 out_style="file", output=str(tmp_path / "out" / "runs.jsonl"),
                 plan={"downloads": 40, "bytes_each": 1_778_514})
     return task, record
@@ -494,12 +499,16 @@ def test_runner_injects_seed_and_budget_env(monkeypatch, tmp_path):
         "seed": 20261127, "approved_by": "test",
         "approved_at": "2026-11-27T11:30:00+08:00"}), encoding="utf-8")
     task, record = _recorder_task(tmp_path, stopped=False, exit_code=0)
+    disabled = []
+    monkeypatch.setattr(runner, "disable_scheduled_task",
+                        lambda n: disabled.append(n) or {"ok": True, "task": n})
     st = runner.execute("cmin", task, "seed-env-test", override={"skip_origin": True})
     assert st["status"] == "SUCCESS", st
     inv = json.loads(record.read_text(encoding="utf-8"))
     assert "--seed" in inv["argv"] and "20261127" in inv["argv"]
     assert inv["budget_limit"] == "120000000"
     assert inv["budget_state"].endswith("seed-env-test.json")
+    assert disabled == ["PoolCminExp"]          # §C4：跑完即禁
 
 
 def test_budget_stop_marks_partial_but_keeps_data(monkeypatch, tmp_path):
@@ -515,11 +524,15 @@ def test_budget_stop_marks_partial_but_keeps_data(monkeypatch, tmp_path):
         "seed": 20261127, "approved_by": "test",
         "approved_at": "2026-11-27T11:30:00+08:00"}), encoding="utf-8")
     task, _ = _recorder_task(tmp_path, stopped=True, exit_code=1)
+    disabled = []
+    monkeypatch.setattr(runner, "disable_scheduled_task",
+                        lambda n: disabled.append(n) or {"ok": True, "task": n})
     st = runner.execute("cmin", task, "budget-stop-test", override={"skip_origin": True})
     assert st["status"] == "PARTIAL"
     assert st["error_summary"].startswith("budget_exhausted")
     assert st["record_count"] == 1                 # 已完成的数据保留
     assert st["budget_runtime"]["stopped"] is True
+    assert disabled == ["PoolCminExp"]
 
 
 # --------------------------------------------------------------------------

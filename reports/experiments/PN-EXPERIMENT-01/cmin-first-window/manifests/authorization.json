@@ -1,0 +1,12 @@
+{
+  "task": "cmin",
+  "date": "2026-11-27",
+  "hour": 12,
+  "minute": 15,
+  "timezone": "Asia/Shanghai",
+  "max_bytes": 120000000,
+  "single_use": true,
+  "seed": 20261127,
+  "approved_by": "user (2026-11-27 explicit authorization message)",
+  "approved_at": "2026-11-27T02:47:28+08:00"
+}

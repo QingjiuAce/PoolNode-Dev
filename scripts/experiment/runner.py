@@ -70,10 +70,14 @@ TASKS: dict[str, dict] = {
         "needs": ["config/bench-assets.yaml"],
         "origin": True,
         # 正式实验需单独授权（§4.3）；未授权前即便任务被触发也拒绝执行
-        "suspended": True,
+        # 2026-11-27 12:15 窗口：用户已授权（RUN-02），本开关临时放开；
+        # 真正的门是下面的一次性授权文件，窗口结束由 auto_disable_task 关闭任务。
+        "suspended": False,
         "suspend_reason": "C_MIN 正式实验尚未获得窗口授权（PN-EXPERIMENT-01 §4.3）",
         # 一次性授权：每个窗口一个 authorization 文件，消费后不可复用
         "requires_authorization": True,
+        # 授权窗口跑完后自动禁用自身任务（§C4 要求"立即禁用"）
+        "auto_disable_task": "PoolCminExp",
         # 流量模型：5 reps × 4 worker 组 × 2 C_MIN = 40 次整文件下载
         "plan": {"downloads": 40, "bytes_each": 1_778_514},
         "resources": ["link:local-hk", "out:cmin-experiment"],
@@ -456,6 +460,17 @@ def consume_authorization(auth: dict, run_id: str) -> str:
     return ""
 
 
+def disable_scheduled_task(name: str) -> dict:
+    """授权窗口结束后禁用自身任务（§C4）；失败只记录，不改变实验结果。"""
+    try:
+        proc = subprocess.run(["schtasks", "/Change", "/TN", name, "/DISABLE"],
+                              capture_output=True, text=True, timeout=30)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "task": name, "error": f"{exc.__class__.__name__}: {exc}"}
+    return {"ok": proc.returncode == 0, "task": name, "rc": proc.returncode,
+            "detail": ((proc.stdout or "") + (proc.stderr or "")).strip()[:200]}
+
+
 def strip_out(args: list[str]) -> list[str]:
     """移除任务定义里已有的 --out（统一由 execute() 按 target 注入）。"""
     out, skip = [], False
@@ -563,6 +578,7 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         return finish("SKIPPED", f"suspended:{task.get('suspend_reason', '')}"[:400])
 
     budget_max = None
+    consumed = False
     if not smoke:
         auth, problem = load_authorization(task_name, task, started)
         if problem:
@@ -583,6 +599,7 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
                 log("[AUTH-DENY] " + problem)
                 return finish("SKIPPED", problem[:400], phase="authorization")
             log(f"[AUTH] consumed {auth['path']} expected_bytes={expected} max={budget_max}")
+            consumed = True
 
     try:
         lock_set = locks.hold(LOCK_DIR, LOCK_JOURNAL, task.get("resources", []),
@@ -727,6 +744,12 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         return finish("SUCCESS", f"records+{report['new_records']}", upload=up)
     finally:
         lock_set.release()
+        # 授权窗口结束就跑完即禁（§C4）：不把任务留着等下一档
+        if consumed and task.get("auto_disable_task"):
+            res = disable_scheduled_task(task["auto_disable_task"])
+            state["auto_disable"] = res
+            write_json(state_path, state)
+            log("[AUTODISABLE] " + json.dumps(res, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
