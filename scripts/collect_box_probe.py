@@ -111,7 +111,16 @@ def main(argv=None) -> int:
     ap.add_argument('--remote-file',
                     default=os.environ.get('POOL_CN2_REMOTE_FILE', DEFAULT_REMOTE_FILE),
                     help='远端 JSONL 路径')
+    ap.add_argument('--out', default=None,
+                    help='本地归档路径（默认 reports/benchmarks/v06-monitoring/cn2box-probe.jsonl）')
+    ap.add_argument('--log', default=None,
+                    help='采集日志路径（默认 reports/benchmarks/v06-monitoring/collect.log）')
     args = ap.parse_args(argv)
+    global ARCHIVE, LOG
+    if args.out:
+        ARCHIVE = Path(args.out).resolve()
+    if args.log:
+        LOG = Path(args.log).resolve()
     try:
         configure(args.host, args.user, args.remote_file)
     except ValueError as exc:

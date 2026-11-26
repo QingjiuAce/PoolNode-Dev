@@ -17,3 +17,6 @@ config/assets.yaml
 # 测量运行日志（原始数据 jsonl 仍然提交）
 reports/benchmarks/**/*.log
 reports/benchmarks/**/*.lock
+
+# 实验调度运行期产物（状态/日志/烟测输出不提交；交付报告在 reports/recovery/）
+reports/experiment-logs/
