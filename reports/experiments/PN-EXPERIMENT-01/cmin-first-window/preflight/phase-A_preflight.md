@@ -110,9 +110,17 @@ worker 组各一对），与 phase-4 预算算式 `2 C_MIN × 4 臂 × 5 组 × 
 **冲突**：理论最坏 124.4 MB 超过 120 MB 上限 4.4 MB。实际触发条件是链路全程失败/
 重试风暴，那时应当人工中止。请确认口径（见最终申请 §3）。
 
-服务器侧"本月流量余量"**无法读取**：读取需要 SSH，而 SSH 主机身份异常（见 §A6）。
-已知约束（11-26 审计）：1 TB/月流量池，当月此前用量远低于上限；本次 71 MB
-占池 0.007%，即使按最坏 124 MB 也仅 0.012%。
+### 服务器侧流量（02:27 通过 `ssh pool` 读取）
+
+```
+/var/log/nginx 现存 11 月日志合计（23–27 日，含 .gz）：6053.0 MB / 19 944 请求
+数据盘：/dev/vdb1  49G  已用 199M  可用 47G
+```
+
+- 更早的 11 月日志已轮转删除，所以 **6.05 GB 是"23 日起"的下界**，不是全月总量；
+- 审计已知配额为 **1 TB/月**；本次 71.1 MB = 月内已见流量的 1.2%、配额的 **0.007%**，
+  即使按最坏 124.4 MB 也只占配额 0.012%；
+- 磁盘余量 47 GB，40 次 1.7 MB 下载（临时文件用后即删）无压力。
 
 自动重试不会无限增长：单流臂无重试，分段臂每段 2 次上限，runner 不补跑。
 
@@ -145,64 +153,56 @@ worker 组各一对），与 phase-4 预算算式 `2 C_MIN × 4 臂 × 5 组 × 
 12 点以外的任何小时都没有可用授权。测试覆盖：缺授权、重复使用、跨窗口、
 预算超限（不消费）。
 
-## A6. 阻断项：SSH 主机密钥变更（生产侧异常）
+## A6. 生产机身份与访问通道（02:26–02:28 复核，已解除 HK 阻断）
 
-| 项 | 01:53 时 | 02:16 时 |
-|---|---|---|
-| HK `156.233.227.20` ed25519 | `SHA256:1dUGXBUOxkQU6xHmp/ERW+pQRYLLG/ODpjwbbJQWucY`（固定文件） | `SHA256:MlHlKSmWIqL4swLGNKDUd/sec6X93Zf+9hxTAo7WptU` |
-| HK ecdsa | `SHA256:MJOXmSJWPpnxNjPprd0b3wyz0XlkDkhqOeSckMdxlsg` | `SHA256:Yk3l/F7LTiTgc7rnDgN09eFNg+Zt/aWP7a2kC9p39I0` |
-| HK rsa | `SHA256:TbfefLcsi5zY4nhdynss5CburgqPHIGvc3QRA1liqEY` | `SHA256:/UsDyMSSRkVPh6YZ2Z1pgcyOXZSvRWJmIYIZno3izJU` |
-| CN2 `160.202.47.187` ed25519 | 连接成功 | `SHA256:F2PhHqAjuthaIVZsdiQJbjtv866Tsu2mLgvavfr2rdg`（与 `known_hosts` 记录不符） |
+### 发生了什么（按机器上的证据）
 
-### 已排除"换了台机器/MITM"的证据
-
-`https://dl.bszx.site/monitor/status.json`（生产机自带监控，02:22 生成）：
-
-```json
-{"hostname":"ser103837614816", "uptime_s":1072, "os":"Debian GNU/Linux 12 (bookworm)",
- "kernel":"6.1.0-10-amd64", "srv_pool_mounted":true, "services":{"nginx":"active"},
- "integrity":{"state":"ok","files":44,"bytes":117549350,"verified":44,"corrupted":0,"missing":0},
- "cert":{"not_after":"2027-02-18T22:05:12+00:00"}}
+```
+02:04:27  reboot（last reboot；/proc/uptime 与 02:26 的 1339 s 一致）
+02:09      root 从 tty1（控制台）登录，持续 00:00
+02:12–02:15 root 从 tty1 登录，持续 00:03
+02:14:24  /etc/ssh/ssh_host_{rsa,ecdsa,ed25519}_key 全部重建（mtime 一致）
 ```
 
-- 主机名 `ser103837614816` 与 `_pool-cloud-lab/logs/01_recon.txt` 记录一致 → **同一台机器**；
-- 44 个文件 / **117 549 350 字节**与 01:51 的只读核对完全一致 → **数据未变**；
-- 证书到期日未变 → **同一证书**；
-- `uptime_s = 1072`（≈17.9 分钟）→ **机器在 02:01 左右重启过**。
+- 02:15 起，本机用旧固定密钥连 HK 失败；02:27 用旧密码认证也失败。
+- **结论：02:09–02:15 有一次控制台维护**（改主机密钥 + 改 root 密码），
+  不是远程入侵。之前的"MITM"假设被这条时间线排除。
+- 站点与数据全程未受影响：`44` 文件 / `117 549 350` B / `nginx active` /
+  `NRestarts=0` / 证书 `2027-02-18` 未变；`/srv/pool/labnode/*` 与
+  `/opt/poolnode-lab/source` 均在。
 
-**最可能的解释**：02:01 的重启触发了 SSH 主机密钥重建（cloud-init 的
-`ssh_deletekeys` 或管理员动作），因此 01:53 与 02:16 会看到不同密钥。
-这比"路径拦截"更符合全部观测（MITM 不会让机器 uptime 归零、也不会保持 44/117549350 不变）。
+### 身份确认方式（三重一致）
 
-### 仍然阻断的原因
+| 来源 | ed25519 指纹 |
+|---|---|
+| `ssh pool`（key 认证登录后）`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` | `SHA256:MlHlKSmWIqL4swLGNKDUd/sec6X93Zf+9hxTAo7WptU` |
+| `ssh-keyscan 156.233.227.20`（线上实际） | 同上 |
+| `https://dl.bszx.site/monitor/status.json` | `hostname=ser103837614816`, `uptime_s` 与重启时刻一致, 44/117549350 |
 
-- 即使解释合理，**新密钥尚未经带外通道确认**；上传器使用 `RejectPolicy`，现在上传必然失败；
-- 02:01 的**重启本身就是未预告的生产变更**（nginx 已自愈且数据完好，但按 §9 必须上报）；
-- 我**没有**向任何未验证主机发送密码：paramiko 在校验失败时不会进入认证阶段。
+ECDSA `Yk3l…`、RSA `/UsDy…` 同样三方一致。
 
-### 两个盒子都受影响
+### 已完成的修复
 
-CN2 `160.202.47.187` 同样三个密钥全部变更：
+1. `~/.ssh/pool-lab/known_hosts_hk_lab` 按"线上 = 机内"的指纹重新固定（旧文件已备份）；
+2. 上传器改用 **SSH 密钥**（`~/.ssh/id_ed25519_zcode`，与 `ssh pool` 同一身份），
+   `~/.pool/remote.json` 已移除明文密码（旧文件备份为 `.bak-*`）；
+3. 端到端验证：`runner.py --task probe --smoke` → `SUCCESS`，`upload_status=ok`
+   （3 个文件上传 + 远端 SHA 核对通过）；
+4. 测试：`302 passed / 1 skipped`（新增"只有 key 没有 password 不得 KeyError"用例）。
 
-| 类型 | 本机 `known_hosts` 记录 | 当前实际 |
-|---|---|---|
-| ed25519 | `SHA256:ouXt4b//…r+E` | `SHA256:F2PhHqAj…rdg` |
-| ecdsa | `SHA256:5odfCp7a…VJc` | `SHA256:1ltGYz4S…3Lo` |
-| rsa | `SHA256:k4zEE/C/…BlCE` | `SHA256:KMRixmml…XPY` |
+### 仍未恢复：CN2（不影响本窗口，但影响 23:40 同步）
 
-后果（除上传外）：
+`ssh hk`（CN2 `160.202.47.187`）现在报：
 
-- `PoolProbeSync`（每日 23:40）用 `ssh/scp` + `BatchMode` + 默认 `known_hosts`，
-  今晚会因主机密钥不符而失败（fail-closed，不会写坏归档；CN2 侧数据仍只增，
-  修复后一次补齐）。
-- 本机 `~/.ssh/known_hosts` 在 02:16–02:17 被某个 OpenSSH 客户端动作改写
-  （出现 `known_hosts.old`，新增了 HK 的 ecdsa/rsa 条目）；该文件不参与上传器校验。
+```
+Offering public key: id_ed25519_zcode SHA256:yX+U6yZplqz8JN3Ym2z+xSN+6k47Ccwfw89DfyDESFE
+root@160.202.47.187: Permission denied (publickey,password).
+```
 
-### 解除条件（任一）
-
-1. 你在云控制台/VNC 里执行 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`，把指纹发我核对
-   → 我更新 `~/.ssh/pool-lab/known_hosts_hk_lab` 并复验（读取 `/srv/pool/data` 计数与收件箱）；
-2. 或你直接授权我按"重启后重生成"的推断重新固定（TOFU），随即用只读命令验证数据一致性。
+- CN2 三个主机密钥也全部变更（ed25519 `F2Ph…`），且我们的公钥不再被接受；
+- 即 CN2 很可能也被重建/重置过（与本机维护同一时段）；
+- 影响：今晚 `PoolProbeSync` 会 fail-closed（CN2 数据只增，修复后一次补齐）；
+  **不影响** C_MIN 窗口本身（窗口只写香港收件箱，CN2 仅作独立参照）。
 
 ## A7. 阶段 A 判定
 
@@ -212,11 +212,9 @@ CN2 `160.202.47.187` 同样三个密钥全部变更：
 | A2-1 正式模式 `--out` | PASS（正式模式端到端用例 + 全任务参数化） |
 | A2-2 CN2 CRLF/LF | PASS（临时副本演练，历史字节不变） |
 | A3 实验矩阵 | PASS（20 对，与协议一致；128K 的 w16 实为 13 块已注明） |
-| A4 流量预算 | **CONDITIONAL**（最坏 124.4 MB > 120 MB；需确认口径；月度余量不可读） |
+| A4 流量预算 | **CONDITIONAL**（最坏 124.4 MB > 120 MB；配额余量充足，需确认口径） |
 | A5 调度门控 | PASS（一次性授权 + 双保险 + 无补跑） |
-| A6 生产身份 | **FAIL（阻断）** — 02:01 重启导致 SSH 主机密钥重建，新指纹未带外确认 |
+| A6 生产身份 | **PASS（HK 已重置并复验）**；CN2 访问未恢复（不影响本窗口） |
 
-**阶段 A 未通过 → 不进入阶段 B/C。**
-
-> 注：数据与站点本身健康（44 文件 / 117 549 350 B / nginx active / 证书未变），
-> 阻断点只在"上传通道身份未确认"。确认并重固定后，A4 的月度用量读取也可恢复。
+**阶段 A：HK 侧通过；CN2 侧单独记为 BLOCKED。**
+是否进入阶段 B/C 取决于用户对预算口径与运行条件的确认。
