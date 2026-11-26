@@ -7,6 +7,9 @@
 
 - 用户明确给出：**日期 + 窗口（如 12:15）+ 流量上限**
 - 本次建议：2026-11-27 12:15（04:15 UTC），上限 120 MB
+- **SSH 主机身份已通过带外通道核验并重新固定**（2026-11-27 02:16 发现 HK 三个主机密钥全部变更，
+  见 `cmin-first-window/preflight/phase-A_preflight.md` §A6）。未核验前不得运行——
+  否则上传 fail-closed，窗口只能是 PARTIAL，且等于向未验证的主机发送密码。
 
 ## 1. 窗口前 30 分钟
 
@@ -32,35 +35,43 @@ python -X utf8 scripts\experiment\runner.py --task probe
 
 > 只在探针档位小时内才会真正采样；否则记 SKIPPED（这是预期的）。
 
-## 2. 解除挂起（两个开关，缺一不可）
+## 2. 解除挂起（三个开关，缺一不可）
 
-1. 代码侧：把 `scripts/experiment/runner.py` 中 `TASKS["cmin"]["suspended"]` 改为 `False`，
-   并同步 `install_tasks.ps1` 的 `-EnableCmin` 使用；
-2. 任务侧：`Enable-ScheduledTask -TaskName PoolCminExp`。
+1. **代码侧**：把 `TASKS["cmin"]["suspended"]` 改为 `False` 并提交（提交后工作区必须干净，
+   否则正式运行的 `code_dirty` 门会拦下）；
+2. **一次性授权文件**：`reports/experiment-logs/authorizations/cmin-2026-11-27T12.json`；
+3. **任务侧**：`Enable-ScheduledTask -TaskName PoolCminExp`。
 
-```powershell
-# 代码改完后
-python -m pytest tests\test_experiment_scheduling.py -q   # 预期 1 个用例会失败（它断言 suspended=True）
+授权文件内容（严格按此格式）：
+
+```json
+{
+  "task": "cmin",
+  "date": "2026-11-27",
+  "hour": 12,
+  "minute": 15,
+  "timezone": "Asia/Shanghai",
+  "max_bytes": 120000000,
+  "single_use": true,
+  "approved_by": "<授权人>",
+  "approved_at": "<ISO 时间>"
+}
 ```
+
+门控行为：缺文件 → `SKIPPED: no_authorization`；小时不匹配 → 同上；
+同一窗口第二次 → `SKIPPED: authorization_already_consumed:<run_id>`；
+计划流量 > `max_bytes` → `FAILED: budget_exceeds_authorization`（**不消费授权**）。
 
 > 注意：`test_cmin_is_suspended_and_off_plan_hour_removed` 断言 `suspended is True`。
-> 解除挂起时该用例必须同步改为断言 `False`（并保留"hours 不含 1"的断言），
+> 解除挂起时该用例必须同步改为断言 `False`（保留"hours 不含 1"的断言），
 > 否则测试会拦下你——这是有意的防误改设计。
 
-然后：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\experiment\install_tasks.ps1 `
-  -RepoRoot "F:\鲸鲸\GitHub\开源二创\Pool-guard" `
-  -Python "C:\Users\36833\AppData\Local\Python\pythoncore-3.14-64\python.exe" `
-  -EnableCmin
-```
-
-确认：
+确认三个开关都就位：
 
 ```powershell
 Get-ScheduledTask -TaskName PoolCminExp | Select-Object State
 Get-ScheduledTaskInfo -TaskName PoolCminExp | Select-Object NextRunTime
+Get-ChildItem reports\experiment-logs\authorizations\      # 必须有 cmin-2026-11-27T12.json
 ```
 
 ## 3. 窗口执行（12:15:00 自动开始）
@@ -129,16 +140,23 @@ python -X utf8 scripts\experiment\window_class.py `
 
 远端核对（逐文件 SHA）：上传日志里已有比对结果；如需复核，登录收件箱执行 `sha256sum`。
 
-## 6. 收尾
+## 6. 收尾（无论成败，顺序执行）
 
-- 无论成败，**把 `suspended` 改回 `True`** 并 `Disable-ScheduledTask`，
-  防止次日同一时刻自动再跑（下一窗口必须再次授权）。
-- 提交实验数据与报告；不修改历史数据。
-- 不因为失败而调低阈值或删除异常样本。
+1. `Disable-ScheduledTask -TaskName PoolCminExp`（立即，不等实验结束）；
+2. **把 `suspended` 改回 `True`** 并提交（保证 20–23 点即使被谁启用也不会跑）；
+3. **清除本次一次性授权标记**：把
+   `authorizations/cmin-2026-11-27T12.json` 与 `…T12.consumed.json`
+   移动到 `reports/experiments/PN-EXPERIMENT-01/cmin-first-window/manifests/`
+   作为证据保留（**不删除**，但不再留在生效目录）；
+4. 确认没有遗留进程：`Get-Process python` 中无本次 run；`locks.jsonl` 最后一条是 `released`；
+5. 确认 `NextRunTime` 不再指向今天 20:15（任务已 Disabled）；
+6. 提交实验数据与报告；不修改历史数据；
+7. 不因为失败而调低阈值或删除异常样本。
 
 ## 7. 回滚（如果忘了改回）
 
 ```powershell
 Disable-ScheduledTask -TaskName PoolCminExp
 # 并恢复 runner.py 的 suspended: True，提交
+# 授权文件反正已被 consumed 标记锁死，重复触发只会 SKIPPED
 ```
