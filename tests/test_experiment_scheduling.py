@@ -186,6 +186,15 @@ def test_execute_skips_on_lock_conflict(monkeypatch, tmp_path):
     assert st["record_count"] == 0
 
 
+def test_dirty_code_blocks_formal_but_not_smoke(monkeypatch):
+    monkeypatch.setattr(runner, "code_dirty", lambda: ["M scripts/x.py"])
+    formal = runner.precheck("cmin", runner.TASKS["cmin"], None, {"skip_origin": True})
+    assert any(p.startswith("code_dirty") for p in formal)
+    smoke = runner.precheck("cmin", runner.TASKS["cmin"], None,
+                            {"skip_origin": True}, formal=False)
+    assert not any(p.startswith("code_dirty") for p in smoke)
+
+
 # --------------------------------------------------------------------------
 # 采集器：CRLF 历史归档仍可增量，且历史字节不变
 # --------------------------------------------------------------------------

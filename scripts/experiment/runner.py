@@ -203,12 +203,26 @@ def origin_reachable(origin: str, timeout: float = 8.0) -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
+def code_dirty() -> list[str]:
+    """代码目录的未提交改动（不含实验数据/报告，故只看 scripts 与 tests）。"""
+    proc = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no",
+                           "--", "scripts", "tests"], cwd=ROOT,
+                          capture_output=True, text=True)
+    return [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+
+
 def precheck(task_name: str, task: dict, out_dir: pathlib.Path | None,
-             override: dict) -> list[str]:
+             override: dict, formal: bool = True) -> list[str]:
     problems: list[str] = []
     script = pathlib.Path(override["script"]) if override.get("script") else ROOT / task["script"]
     if not script.is_file():
         problems.append(f"script_missing:{script}")
+    if formal and not override.get("skip_code_dirty"):
+        dirty = code_dirty()
+        if dirty:
+            # commit 无法标识实际运行的代码，正式实验不接受这种状态（§4.1）
+            problems.append(f"code_dirty:{len(dirty)}:"
+                            + ";".join(d.split()[-1] for d in dirty[:5]))
     if sys.version_info < (3, 10):
         problems.append(f"python_too_old:{platform.python_version()}")
     if os.environ.get("POOL_FORCE_MISSING_DEP") == "1":
@@ -487,9 +501,12 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
         log(f"[LOCK-ERROR] {exc}")
         return finish("FAILED", f"lock_error:{exc}"[:400], phase="lock")
 
-    state["locks"] = lock_set.describe()
+        state["locks"] = lock_set.describe()
+        state["code_dirty"] = [] if smoke else code_dirty()[:20]
+        if state["code_dirty"]:
+            write_json(state_path, state)
     try:
-        problems = precheck(task_name, task, out_dir, override)
+        problems = precheck(task_name, task, out_dir, override, formal=not smoke)
         if problems:
             log("[PRECHECK-FAIL]\n" + "\n".join(problems))
             return finish("FAILED", "; ".join(problems)[:400], phase="precheck")

@@ -1,0 +1,210 @@
+{
+  "generated_at": "2026-11-27T01:19:30+08:00",
+  "source_run_id": "smoke-sync-20261127T011520-196467",
+  "source_host": "160.202.47.187 (ser654121548140)",
+  "source_remote_path": "/root/pool-probe/probe-results-v06.jsonl",
+  "remote_sha256": "0cc764ffefa43c3b3cee391c5648c384a879588e8d0403b9859a5fca9beab494",
+  "payload_sha256": "0cc764ffefa43c3b3cee391c5648c384a879588e8d0403b9859a5fca9beab494",
+  "payload_bytes": 39805,
+  "records": 12,
+  "new_vs_archive": 6,
+  "duplicate_of_archive": 6,
+  "all_sha_ok": true,
+  "timezone": "Asia/Shanghai (+08:00)",
+  "merged_into_formal_archive": false,
+  "note": "只读保留；未写入 reports/benchmarks/v06-monitoring/cn2box-probe.jsonl",
+  "entries": [
+    {
+      "ts": "2026-11-25T12:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.39,
+        "w16": 9.23,
+        "w32": 7.67
+      },
+      "sha_ok": true,
+      "line_sha256": "e182b592d9511148fee04c0a479e286ac25b7ab9c6578036a3b048815a49f262",
+      "already_in_archive": true
+    },
+    {
+      "ts": "2026-11-25T16:05:02+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.34,
+        "w16": 9.23,
+        "w32": 8.76
+      },
+      "sha_ok": true,
+      "line_sha256": "b83eeb1416651a9d75fcd1fa6547d010d420d33234bf89141c2f9e6fba8ff7f9",
+      "already_in_archive": true
+    },
+    {
+      "ts": "2026-11-25T20:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.32,
+        "w16": 9.25,
+        "w32": 7.24
+      },
+      "sha_ok": true,
+      "line_sha256": "3fd65918f6a9995436d2c29186ba51317bb7be2212a92506afe056394f7064f1",
+      "already_in_archive": true
+    },
+    {
+      "ts": "2026-11-25T21:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.4,
+        "w16": 9.23,
+        "w32": 7.85
+      },
+      "sha_ok": true,
+      "line_sha256": "8d665864e71ef242ca1d80dab79b7311bf3f0e299e366a893b8ad08741358f61",
+      "already_in_archive": true
+    },
+    {
+      "ts": "2026-11-25T22:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "w32": 8.98,
+        "w16": 9.18,
+        "single": 8.52
+      },
+      "sha_ok": true,
+      "line_sha256": "ed0799c6758aa40524c09f6fee15c0410744709ab83a1ea33cb35a03c7d16286",
+      "already_in_archive": true
+    },
+    {
+      "ts": "2026-11-25T23:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "w32": 8.76,
+        "w16": 9.18,
+        "single": 9.34
+      },
+      "sha_ok": true,
+      "line_sha256": "06d0f449cf0f75911a505d7a8270a5ac56b25a7152764eaff8988f3acf94266e",
+      "already_in_archive": true
+    },
+    {
+      "ts": "2026-11-26T12:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.38,
+        "w16": 8.37,
+        "w32": 7.9
+      },
+      "sha_ok": true,
+      "line_sha256": "44c270ba6fae7b6e2eae1f9f9f6a52d071f014e843cb0312ff25bb413b8ea90a",
+      "already_in_archive": false
+    },
+    {
+      "ts": "2026-11-26T16:05:02+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.27,
+        "w16": 9.19,
+        "w32": 8.94
+      },
+      "sha_ok": true,
+      "line_sha256": "95df8eafa37f74de7319c06dbada26b71b5d08668f6fcabb62814d023cd50091",
+      "already_in_archive": false
+    },
+    {
+      "ts": "2026-11-26T20:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.38,
+        "w16": 8.96,
+        "w32": 8.84
+      },
+      "sha_ok": true,
+      "line_sha256": "8e8d8ee40cef4dfaefa1a99dca383074ccf724abbd35ccb1731af41b0d0ea821",
+      "already_in_archive": false
+    },
+    {
+      "ts": "2026-11-26T21:05:02+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "single": 9.21,
+        "w16": 8.75,
+        "w32": 9.1
+      },
+      "sha_ok": true,
+      "line_sha256": "26eaf433e6a67fec0166dcde3050e4ae5f83908fd4ddd0db77eabb8833ea82d4",
+      "already_in_archive": false
+    },
+    {
+      "ts": "2026-11-26T22:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "w32": 9.06,
+        "w16": 9.2,
+        "single": 9.38
+      },
+      "sha_ok": true,
+      "line_sha256": "d85c162135c7af646fa3b531f68a27a4ca69f0e27fd0c1fa31ff533f1ef94154",
+      "already_in_archive": false
+    },
+    {
+      "ts": "2026-11-26T23:05:01+08:00",
+      "tag": "cn2box",
+      "host": "ser654121548140",
+      "python": "3.11.2",
+      "asset": "bench-6m",
+      "size": 5403720,
+      "arms": {
+        "w32": 8.36,
+        "w16": 9.23,
+        "single": 9.46
+      },
+      "sha_ok": true,
+      "line_sha256": "329e3ce960594883d7d9ef399ed6c22929cacce6ba3dbd39d199f14182a5cd34",
+      "already_in_archive": false
+    }
+  ]
+}
