@@ -322,10 +322,18 @@ def remote_upload(files: list[tuple[pathlib.Path, str]], dest_dir: str) -> dict:
     cli = paramiko.SSHClient()
     cli.load_host_keys(str(known))
     cli.set_missing_host_key_policy(paramiko.RejectPolicy())
+    connect_args = dict(hostname=conf["host"], port=int(conf.get("port", 22)),
+                        username=conf["user"], look_for_keys=False, allow_agent=False,
+                        timeout=15, banner_timeout=15, auth_timeout=15)
     try:
-        cli.connect(conf["host"], port=int(conf.get("port", 22)), username=conf["user"],
-                    password=conf["password"], look_for_keys=False, allow_agent=False,
-                    timeout=15, banner_timeout=15, auth_timeout=15)
+        if conf.get("key"):
+            # 密钥认证优先（与 `ssh pool` 同一身份，避免明文密码）
+            connect_args["pkey"] = paramiko.Ed25519Key.from_private_key_file(
+                str(pathlib.Path(conf["key"]).expanduser()))
+            connect_args["passphrase"] = conf.get("key_passphrase")
+        else:
+            connect_args["password"] = conf["password"]
+        cli.connect(**connect_args)
     except Exception as exc:  # noqa: BLE001
         res["detail"] = f"connect_failed:{exc.__class__.__name__}"
         return res

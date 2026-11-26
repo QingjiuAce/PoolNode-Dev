@@ -347,6 +347,20 @@ def test_budget_overrun_is_refused_before_consuming(monkeypatch, tmp_path):
     assert not list(runner.AUTH_DIR.glob("*.consumed.json"))  # 未消费，可重试同一窗口
 
 
+def test_upload_accepts_key_auth_without_password(monkeypatch, tmp_path):
+    """配置里只有 key 没有 password 时不得抛 KeyError（2026-11-27 起的默认形态）。"""
+    known = tmp_path / "known_hosts"
+    known.write_text("", encoding="utf-8")
+    conf = tmp_path / "remote.json"
+    conf.write_text(json.dumps({"host": "127.0.0.1", "port": 1, "user": "x",
+                                "known_hosts": str(known),
+                                "key": str(tmp_path / "missing_key")}), encoding="utf-8")
+    monkeypatch.setattr(runner, "REMOTE_CONF", conf)
+    res = runner.remote_upload([(tmp_path / "f", "f")], "/tmp/x")
+    assert res["enabled"] is True
+    assert res["detail"].startswith("connect_failed:")
+
+
 # --------------------------------------------------------------------------
 # 任务入口一致性：唯一的可执行入口是 runner.py --task
 # --------------------------------------------------------------------------
