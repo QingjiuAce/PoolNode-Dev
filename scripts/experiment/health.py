@@ -141,6 +141,17 @@ def evaluate(now: dt.datetime) -> dict:
                     "detail": (conflicts[-1].get("error_summary") or "")[:160],
                     "run_id": conflicts[-1].get("run_id")})
 
+            # 未授权却被触发（一次性授权缺失/已消费）：必须可见，不能被当成普通 SKIPPED
+            unauth = [s for s in recent(states, now, hours=24)
+                      if str(s.get("error_summary", "")).startswith(
+                          ("no_authorization", "authorization_invalid",
+                           "authorization_already_consumed"))]
+            if unauth:
+                entry["issues"].append({
+                    "level": "WARNING", "code": "unauthorized_trigger",
+                    "detail": (unauth[-1].get("error_summary") or "")[:160],
+                    "run_id": unauth[-1].get("run_id")})
+
             successes = [s for s in states if s.get("status") == "SUCCESS"]
             if successes:
                 last_ok = dt.datetime.fromisoformat(successes[-1]["end_time"])

@@ -50,6 +50,7 @@ def _default_lock_dir() -> pathlib.Path:
 
 LOCK_DIR = _default_lock_dir()
 LOCK_JOURNAL = LOGS / "locks.jsonl"
+AUTH_DIR = LOGS / "authorizations"
 REMOTE_CONF = pathlib.Path(os.environ.get("POOL_REMOTE_CONF",
                                          pathlib.Path.home() / ".pool" / "remote.json"))
 EXIT = {"SUCCESS": 0, "FAILED": 1, "SKIPPED": 3, "PARTIAL": 4, "TIMEOUT": 5}
@@ -71,6 +72,10 @@ TASKS: dict[str, dict] = {
         # 正式实验需单独授权（§4.3）；未授权前即便任务被触发也拒绝执行
         "suspended": True,
         "suspend_reason": "C_MIN 正式实验尚未获得窗口授权（PN-EXPERIMENT-01 §4.3）",
+        # 一次性授权：每个窗口一个 authorization 文件，消费后不可复用
+        "requires_authorization": True,
+        # 流量模型：5 reps × 4 worker 组 × 2 C_MIN = 40 次整文件下载
+        "plan": {"downloads": 40, "bytes_each": 1_778_514},
         "resources": ["link:local-hk", "out:cmin-experiment"],
         "telemetry": True,
         "smoke_args": ["--reps", "1", "--cmin", "98304"],
@@ -257,7 +262,8 @@ def precheck(task_name: str, task: dict, out_dir: pathlib.Path | None,
 def validate_outputs(task: dict, target: pathlib.Path, before_lines: int,
                      corrupt: str | None) -> dict:
     report = {"path": str(target), "new_records": 0, "bad_json": 0, "missing_fields": 0,
-              "duplicate_keys": 0, "sha_failures": 0, "ok": True, "detail": []}
+              "duplicate_keys": 0, "sha_failures": 0, "retries_total": 0,
+              "ok": True, "detail": []}
     if not target.exists():
         report.update(ok=False, detail=[f"missing_output:{target}"])
         return report
@@ -284,6 +290,10 @@ def validate_outputs(task: dict, target: pathlib.Path, before_lines: int,
                 break
         if task.get("sha_field") and rec.get(task["sha_field"]) is False:
             report["sha_failures"] += 1
+        try:
+            report["retries_total"] += int(rec.get("retries") or 0)
+        except (TypeError, ValueError):
+            pass
         key = tuple(str(rec.get(k)) for k in task["keys"])
         if key in seen:
             report["duplicate_keys"] += 1
@@ -383,6 +393,55 @@ def remote_upload(files: list[tuple[pathlib.Path, str]], dest_dir: str) -> dict:
 def in_window(task: dict, moment: dt.datetime) -> bool:
     hours = task.get("hours")
     return hours is None or moment.hour in hours
+
+
+# --- 一次性窗口授权（PN-EXPERIMENT-01-RUN §A5）--------------------------------
+def _auth_path(task_name: str, started: dt.datetime) -> pathlib.Path:
+    return AUTH_DIR / f"{task_name}-{started:%Y-%m-%dT%H}.json"
+
+
+def load_authorization(task_name: str, task: dict,
+                       started: dt.datetime) -> tuple[dict | None, str]:
+    """返回 (auth, problem)；problem 非空即拒绝执行。"""
+    if not task.get("requires_authorization"):
+        return None, ""
+    path = _auth_path(task_name, started)
+    if not path.is_file():
+        return None, f"no_authorization:{started:%Y-%m-%dT%H}"
+    try:
+        auth = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return None, f"bad_authorization:{path.name}:{exc.__class__.__name__}"
+    checks = [
+        (auth.get("task") == task_name, "task_mismatch"),
+        (str(auth.get("date")) == started.strftime("%Y-%m-%d"), "date_mismatch"),
+        (auth.get("hour") == started.hour, "hour_mismatch"),
+        (isinstance(auth.get("minute"), int) and 0 <= started.minute - auth["minute"] <= 10,
+         "minute_out_of_window"),
+        (auth.get("single_use") is True, "not_single_use"),
+    ]
+    for ok, code in checks:
+        if not ok:
+            return None, f"authorization_invalid:{code}:{path.name}"
+    return {**auth, "path": str(path)}, ""
+
+
+def consume_authorization(auth: dict, run_id: str) -> str:
+    """原子消费：O_EXCL 创建 consumed 标记；已经存在则本窗口不可再跑。"""
+    path = pathlib.Path(auth["path"])
+    marker = path.with_name(path.name.replace(".json", ".consumed.json"))
+    try:
+        fd = os.open(str(marker), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        try:
+            prev = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            prev = {}
+        return f"authorization_already_consumed:{prev.get('run_id', 'unknown')}"
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"run_id": run_id, "consumed_at": now().isoformat()},
+                            ensure_ascii=False) + "\n")
+    return ""
 
 
 def strip_out(args: list[str]) -> list[str]:
@@ -491,6 +550,28 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
     if not smoke and task.get("suspended"):
         return finish("SKIPPED", f"suspended:{task.get('suspend_reason', '')}"[:400])
 
+    budget_max = None
+    if not smoke:
+        auth, problem = load_authorization(task_name, task, started)
+        if problem:
+            log("[AUTH-DENY] " + problem)
+            return finish("SKIPPED", problem[:400], phase="authorization")
+        if auth:
+            plan = task.get("plan") or {}
+            expected = int(plan.get("downloads", 0)) * int(plan.get("bytes_each", 0))
+            budget_max = int(auth.get("max_bytes") or 0)
+            state["authorization"] = {"path": auth["path"], "max_bytes": budget_max,
+                                      "expected_bytes": expected,
+                                      "approved_at": auth.get("approved_at")}
+            if expected and budget_max and expected > budget_max:
+                return finish("FAILED",
+                              f"budget_exceeds_authorization:{expected}>{budget_max}")
+            problem = consume_authorization(auth, rid)
+            if problem:
+                log("[AUTH-DENY] " + problem)
+                return finish("SKIPPED", problem[:400], phase="authorization")
+            log(f"[AUTH] consumed {auth['path']} expected_bytes={expected} max={budget_max}")
+
     try:
         lock_set = locks.hold(LOCK_DIR, LOCK_JOURNAL, task.get("resources", []),
                               task_name, rid)
@@ -566,6 +647,19 @@ def execute(task_name: str, task: dict, rid: str, smoke: bool = False,
                                                            f"sha_fail={report['sha_failures']}"))
         if report["new_records"] == 0 and not smoke and not task.get("allow_empty"):
             return finish("FAILED", "no_new_records_in_window")
+
+        plan = task.get("plan") or {}
+        if plan and budget_max is not None:
+            bytes_dl = report["new_records"] * int(plan.get("bytes_each", 0))
+            state["budget"] = {
+                "max_bytes": budget_max,
+                "expected_bytes": int(plan.get("downloads", 0)) * int(plan.get("bytes_each", 0)),
+                "downloaded_bytes": bytes_dl,
+                "retries_total": report.get("retries_total", 0),
+                "status": "exceeded" if bytes_dl > budget_max else "ok"}
+            log("[BUDGET] " + json.dumps(state["budget"], ensure_ascii=False))
+            if bytes_dl > budget_max:
+                log(f"[BUDGET-EXCEEDED] {bytes_dl} > {budget_max}")
 
         uploads = [(log_path, log_path.name),
                    (state_path, state_path.name),

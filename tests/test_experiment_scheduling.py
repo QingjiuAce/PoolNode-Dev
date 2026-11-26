@@ -44,6 +44,7 @@ def _dirs(monkeypatch, tmp_path):
     monkeypatch.setattr(runner, "TELEMETRY_DIR", logs / "telemetry")
     monkeypatch.setattr(runner, "LOCK_DIR", logs / "locks")
     monkeypatch.setattr(runner, "LOCK_JOURNAL", logs / "locks.jsonl")
+    monkeypatch.setattr(runner, "AUTH_DIR", logs / "authorizations")
     return logs
 
 
@@ -255,6 +256,95 @@ def test_seed_reproduces_order():
     c = ce.build_order([98304, 131072], ce.ARMS, 3, random.Random(43))
     assert a == b
     assert a != c
+
+
+# --------------------------------------------------------------------------
+# 一次性窗口授权（§A5）
+# --------------------------------------------------------------------------
+def _fake_formal_task(tmp_path, *, downloads=40, bytes_each=1_778_514):
+    script = tmp_path / "fake_task.py"
+    script.write_text(
+        "import argparse, json, pathlib\n"
+        "ap = argparse.ArgumentParser(); ap.add_argument('--out'); a = ap.parse_args()\n"
+        "p = pathlib.Path(a.out); p.parent.mkdir(parents=True, exist_ok=True)\n"
+        "p.write_text(json.dumps({'ts': '2026-11-27T12:15:00', 'arm': 'B', 'round': 0}) + '\\n')\n",
+        encoding="utf-8")
+    task = dict(runner.TASKS["rcv05"])
+    task.update(script=str(script), args=[], smoke_args=[], suspended=False,
+                hours={12, 20},
+                out_style="file", output=str(tmp_path / "out" / "runs.jsonl"),
+                requires_authorization=True,
+                plan={"downloads": downloads, "bytes_each": bytes_each})
+    return task
+
+
+def _write_auth(hour=12, minute=15, max_bytes=120_000_000, **extra):
+    runner.AUTH_DIR.mkdir(parents=True, exist_ok=True)
+    data = {"task": "rcv05", "date": "2026-11-27", "hour": hour, "minute": minute,
+            "timezone": "Asia/Shanghai", "max_bytes": max_bytes, "single_use": True,
+            "approved_by": "test", "approved_at": "2026-11-27T11:30:00+08:00"}
+    data.update(extra)
+    runner.AUTH_DIR.joinpath(f"rcv05-2026-11-27T{hour:02d}.json").write_text(
+        json.dumps(data), encoding="utf-8")
+
+
+def test_no_authorization_blocks_the_run(monkeypatch, tmp_path):
+    _dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "code_dirty", lambda: [])
+    monkeypatch.setattr(runner, "REMOTE_CONF", tmp_path / "no-remote.json")
+    monkeypatch.setattr(runner, "now",
+                        lambda: dt.datetime(2026, 11, 27, 12, 15, tzinfo=BJ))
+    st = runner.execute("rcv05", _fake_formal_task(tmp_path), "no-auth-test",
+                        override={"skip_origin": True})
+    assert st["status"] == "SKIPPED"
+    assert st["error_summary"].startswith("no_authorization")
+    assert st.get("record_count", 0) == 0
+
+
+def test_authorization_is_single_use(monkeypatch, tmp_path):
+    _dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "code_dirty", lambda: [])
+    monkeypatch.setattr(runner, "REMOTE_CONF", tmp_path / "no-remote.json")
+    monkeypatch.setattr(runner, "now",
+                        lambda: dt.datetime(2026, 11, 27, 12, 15, tzinfo=BJ))
+    _write_auth()
+    task = _fake_formal_task(tmp_path)
+    first = runner.execute("rcv05", task, "auth-first", override={"skip_origin": True})
+    assert first["status"] == "SUCCESS", first
+    assert first["budget"]["downloaded_bytes"] == 1_778_514
+    marker = list(runner.AUTH_DIR.glob("*.consumed.json"))
+    assert len(marker) == 1
+    assert json.loads(marker[0].read_text(encoding="utf-8"))["run_id"] == "auth-first"
+    second = runner.execute("rcv05", task, "auth-second", override={"skip_origin": True})
+    assert second["status"] == "SKIPPED"
+    assert second["error_summary"].startswith("authorization_already_consumed")
+
+
+def test_authorization_must_match_the_window(monkeypatch, tmp_path):
+    _dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "code_dirty", lambda: [])
+    monkeypatch.setattr(runner, "REMOTE_CONF", tmp_path / "no-remote.json")
+    monkeypatch.setattr(runner, "now",
+                        lambda: dt.datetime(2026, 11, 27, 20, 15, tzinfo=BJ))
+    _write_auth(hour=12)  # 12 点的授权不能在 20:15 使用
+    st = runner.execute("rcv05", _fake_formal_task(tmp_path), "wrong-hour",
+                        override={"skip_origin": True})
+    assert st["status"] == "SKIPPED"
+    assert st["error_summary"].startswith("no_authorization")
+
+
+def test_budget_overrun_is_refused_before_consuming(monkeypatch, tmp_path):
+    _dirs(monkeypatch, tmp_path)
+    monkeypatch.setattr(runner, "code_dirty", lambda: [])
+    monkeypatch.setattr(runner, "REMOTE_CONF", tmp_path / "no-remote.json")
+    monkeypatch.setattr(runner, "now",
+                        lambda: dt.datetime(2026, 11, 27, 12, 15, tzinfo=BJ))
+    _write_auth(max_bytes=1_000_000)  # 低于 40×1.78 MB
+    st = runner.execute("rcv05", _fake_formal_task(tmp_path), "budget-test",
+                        override={"skip_origin": True})
+    assert st["status"] == "FAILED"
+    assert st["error_summary"].startswith("budget_exceeds_authorization")
+    assert not list(runner.AUTH_DIR.glob("*.consumed.json"))  # 未消费，可重试同一窗口
 
 
 # --------------------------------------------------------------------------
